@@ -1,0 +1,10 @@
+---
+import Layout from '../layouts/Layout.astro';
+import ChatComponent from '../components/ChatComponent';
+---
+
+<Layout title="Chat">
+  <div class="max-w-3xl mx-auto p-4 mt-8">
+    <ChatComponent client:load />
+  </div>
+</Layout> 

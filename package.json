@@ -9,10 +9,13 @@
     "astro": "astro"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^1.1.6",
+    "@ai-sdk/openai": "^1.1.9",
     "@astrojs/react": "^4.2.0",
     "@tailwindcss/vite": "^4.0.5",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
+    "ai": "^4.1.28",
     "astro": "^5.2.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
