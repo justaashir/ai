@@ -25,7 +25,8 @@ export const VisualInput: React.FC<VisualInputProps> = ({
   onChange, 
   onSubmit, 
   contextMessage,
-  onClearContext 
+  onClearContext,
+  isLoading = false
 }) => {
   return (
     <div className="relative">
@@ -62,25 +63,34 @@ export const VisualInput: React.FC<VisualInputProps> = ({
             value={value}
             onChange={onChange}
             placeholder="Type a message"
+            disabled={isLoading}
             className="w-full py-2.5 px-4 bg-white rounded-lg focus:outline-none shadow-sm 
-              placeholder:text-gray-500 text-[15px]"
+              placeholder:text-gray-500 text-[15px] disabled:bg-gray-50"
           />
         </div>
 
         <motion.button
           type="submit"
-          className="w-11 h-11 flex items-center justify-center bg-[#00a884] text-white rounded-full 
-            hover:bg-[#00916e] transition-colors shadow-sm"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          disabled={isLoading}
+          className={`w-11 h-11 flex items-center justify-center text-white rounded-full shadow-sm
+            ${isLoading 
+              ? 'bg-[#8696a0]/20 cursor-not-allowed' 
+              : 'bg-[#00a884] hover:bg-[#00916e] transition-colors'
+            }`}
+          whileHover={isLoading ? {} : { scale: 1.05 }}
+          whileTap={isLoading ? {} : { scale: 0.95 }}
         >
           {value.trim() ? (
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" 
+              stroke={isLoading ? "#8696a0" : "currentColor"}
+            >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
                 d="M5 12h14M12 5l7 7-7 7" />
             </svg>
           ) : (
-            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+            <svg className="w-6 h-6" viewBox="0 0 24 24" 
+              fill={isLoading ? "#8696a0" : "currentColor"}
+            >
               <path d="M12 14a2 2 0 100-4 2 2 0 000 4z" />
               <path d="M16 14a2 2 0 100-4 2 2 0 000 4z" />
               <path d="M8 14a2 2 0 100-4 2 2 0 000 4z" />

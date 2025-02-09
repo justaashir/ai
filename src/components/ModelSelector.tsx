@@ -35,47 +35,78 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       className="w-10 h-10 rounded-full bg-[#00a884] flex items-center justify-center text-white shadow-sm"
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
     >
-      <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-          d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+        <circle cx="24" cy="24" r="23" fill="#008000" stroke="#003300" strokeWidth="2"></circle>
+        <path d="M2,24 H46" stroke="#003300" strokeWidth="2"></path>
+        <path d="M2,24 H22 M26,24 H46" fill="#FFFFFF"></path>
+        <circle cx="24" cy="24" r="6" fill="#FFFFFF" stroke="#003300" strokeWidth="2"></circle>
+        <circle cx="24" cy="24" r="4" fill="#00FF00"></circle>
+        <path d="M4,12 H44 M4,36 H44 M12,4 V44 M36,4 V44" stroke="#00FF00" strokeWidth="1"></path>
+        <circle cx="12" cy="12" r="2" fill="#00FF00"></circle>
+        <circle cx="36" cy="36" r="2" fill="#00FF00"></circle>
       </svg>
     </motion.div>
 
     {/* Model Info */}
-    <div className="flex flex-col flex-1 min-w-0">
-      <div className="flex items-center gap-2">
-        <select
-          value={currentModel}
-          onChange={(e) => onModelChange(e.target.value as ModelType)}
-          className="text-[15px] font-medium bg-transparent border-none focus:outline-none cursor-pointer p-0 
-            truncate max-w-[200px] md:max-w-none"
-        >
-          {models.map(model => (
-            <option key={model.id} value={model.id}>
-              {model.name}
-            </option>
-          ))}
-        </select>
-        <span className="hidden md:inline text-xs px-2 py-0.5 bg-[#00a884]/10 text-[#00a884] rounded-full font-medium">
-          AI
-        </span>
-      </div>
-      <span className="text-xs text-[#667781] truncate">
-        {models.find(m => m.id === currentModel)?.description}
-      </span>
-    </div>
-
-    {/* Optional: Add menu button for mobile */}
-    <motion.button
-      className="p-2 hover:bg-black/5 rounded-full transition-colors md:hidden"
-      whileHover={{ scale: 1.1 }}
-      whileTap={{ scale: 0.95 }}
+    <motion.div 
+      className="flex flex-col flex-1 min-w-0"
+      initial={false}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.2 }}
     >
-      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-          d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-      </svg>
-    </motion.button>
+      <div className="flex items-center gap-2">
+        <div className="relative group">
+          <select
+            value={currentModel}
+            onChange={(e) => onModelChange(e.target.value as ModelType)}
+            className="text-[15px] font-medium bg-transparent border-none focus:outline-none cursor-pointer p-0 
+              truncate max-w-[200px] md:max-w-none hover:text-[#00a884] transition-colors
+              appearance-none pr-6"
+          >
+            {models.map(model => (
+              <option key={model.id} value={model.id}>
+                {model.name}
+              </option>
+            ))}
+          </select>
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      <motion.span 
+        key={currentModel}
+        initial={{ opacity: 0, y: -5 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-xs text-[#667781] truncate"
+      >
+        {models.find(m => m.id === currentModel)?.description}
+      </motion.span>
+    </motion.div>
+
+    {/* Menu button with tooltip */}
+    <div className="relative md:hidden">
+      <motion.button
+        className="p-2 hover:bg-black/5 rounded-full transition-colors"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+        aria-label="More options"
+      >
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
+            d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+        </svg>
+      </motion.button>
+      <div className="absolute bottom-full mb-2 right-0 hidden group-hover:block">
+        <div className="bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
+          More options
+        </div>
+      </div>
+    </div>
   </div>
 ); 
