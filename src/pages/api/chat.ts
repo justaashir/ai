@@ -67,12 +67,22 @@ export const POST: APIRoute = async ({ request }) => {
       m.content.toLowerCase().includes('svg')
     );
 
+    // Check if this is an iteration request (has [Option X] in the last message)
+    const isIteration = messages.length > 0 && 
+      messages[messages.length - 1].role === 'user' && 
+      messages[messages.length - 1].content.includes('[Option');
+
+    // If it's an iteration, modify the system prompt to request only SVG
+    const systemPrompt = isIteration 
+      ? `You are a logo design AI. For iteration requests, respond ONLY with the modified SVG code based on the user's request. Do not include any explanations or rationale.`
+      : LOGO_SYSTEM_PROMPT;
+
     const result = streamText({
       model: model === 'claude-3-sonnet' 
         ? anthropic('claude-3-5-sonnet-20240620')
         : openai(model as 'gpt-4o-mini' | 'gpt-4o'),
       messages: isLogoRequest ? [
-        { role: 'system', content: LOGO_SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         ...messages
       ] : messages,
       temperature: isLogoRequest ? 0.7 : 0.5,
