@@ -10,27 +10,42 @@ interface OptionGridProps {
   onSelect: (index: number) => void;
   onDownload: (svg: string) => void;
   selectedIndex?: number;
+  numExpectedOptions?: number;
 }
 
 export const OptionGrid: React.FC<OptionGridProps> = ({
   options,
   onSelect,
   onDownload,
-  selectedIndex
+  selectedIndex,
+  numExpectedOptions = 3
 }) => {
+  // Create an array of expected option slots
+  const optionSlots = Array.from({ length: numExpectedOptions }, (_, i) => {
+    const option = options[i];
+    const isLoading = i === options.length; // Only show loading for the next expected option
+
+    if (!option && i > options.length) {
+      return null; // Don't render slots beyond the next expected option
+    }
+
+    return (
+      <OptionCard
+        key={i}
+        svg={option?.svg || ''}
+        description={option?.description || ''}
+        index={i}
+        onSelect={() => onSelect(i)}
+        onDownload={() => option && onDownload(option.svg)}
+        isSelected={selectedIndex === i}
+        isLoading={isLoading}
+      />
+    );
+  }).filter(Boolean); // Remove null slots
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 px-2">
-      {options.map((option, index) => (
-        <OptionCard
-          key={index}
-          svg={option.svg}
-          description={option.description}
-          index={index}
-          onSelect={() => onSelect(index)}
-          onDownload={() => onDownload(option.svg)}
-          isSelected={selectedIndex === index}
-        />
-      ))}
+      {optionSlots}
     </div>
   );
 }; 
