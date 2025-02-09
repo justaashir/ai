@@ -64,7 +64,7 @@ export const VisualInput: React.FC<VisualInputProps> = ({
             placeholder="Type a message"
             disabled={isLoading}
             className="w-full py-2.5 px-4 bg-white rounded-lg focus:outline-none shadow-sm 
-              placeholder:text-gray-500 text-[15px] disabled:bg-gray-50"
+              placeholder:text-gray-500 text-base md:text-[15px] disabled:bg-gray-50"
           />
         </div>
 

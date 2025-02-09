@@ -104,9 +104,9 @@ export default function ChatComponent() {
   };
 
   return (
-    <div className="flex flex-col h-screen max-h-screen bg-[#efeae2]">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-[#efeae2]">
       {/* Chat header */}
-      <div className="bg-[#f0f2f5] px-3 py-2 flex items-center shadow-sm sticky top-0 z-10">
+      <div className="bg-[#f0f2f5] px-3 py-2 flex items-center shadow-sm z-10">
         <ModelSelector currentModel={currentModel} onModelChange={setCurrentModel} />
       </div>
       
@@ -231,20 +231,20 @@ export default function ChatComponent() {
       </div>
       
       {/* Input area */}
-      <div className="bg-[#f0f2f5] px-3 py-2 shadow-sm sticky bottom-0 z-10">
+      <div className="bg-[#f0f2f5] px-3 py-2 shadow-sm z-10">
           <VisualInput
             value={input}
             onChange={handleInputChange}
-          onSubmit={onSubmit}
+            onSubmit={onSubmit}
             contextMessage={contextMessage}
-          isLoading={isLoading}
-          onClearContext={() => {
-            setContextMessage(null);
-            setSelectedOption(null);
-            setIsEditing(false);
-          }}
+            isLoading={isLoading}
+            onClearContext={() => {
+              setContextMessage(null);
+              setSelectedOption(null);
+              setIsEditing(false);
+            }}
           />
-        </div>
+      </div>
     </div>
   );
 } 

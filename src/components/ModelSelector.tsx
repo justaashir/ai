@@ -64,7 +64,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             onChange={(e) => onModelChange(e.target.value as ModelType)}
             className="text-[15px] font-medium bg-transparent border-none focus:outline-none cursor-pointer p-0 
               truncate max-w-[200px] md:max-w-none hover:text-[#00a884] transition-colors
-              appearance-none pr-6"
+              appearance-none pr-6 [&::-webkit-calendar-picker-indicator]:hidden"
           >
             {models.map(model => (
               <option key={model.id} value={model.id}>
@@ -88,25 +88,5 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         {models.find(m => m.id === currentModel)?.description}
       </motion.span>
     </motion.div>
-
-    {/* Menu button with tooltip */}
-    <div className="relative md:hidden">
-      <motion.button
-        className="p-2 hover:bg-black/5 rounded-full transition-colors"
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.95 }}
-        aria-label="More options"
-      >
-        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-            d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-        </svg>
-      </motion.button>
-      <div className="absolute bottom-full mb-2 right-0 hidden group-hover:block">
-        <div className="bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
-          More options
-        </div>
-      </div>
-    </div>
   </div>
 ); 

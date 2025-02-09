@@ -44,7 +44,7 @@ export const OptionGrid: React.FC<OptionGridProps> = ({
   }).filter(Boolean); // Remove null slots
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 px-2">
+    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 px-2">
       {optionSlots}
     </div>
   );
