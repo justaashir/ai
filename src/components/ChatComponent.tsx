@@ -10,6 +10,7 @@ import { LoadingState } from './logo/LoadingState';
 import { OptionGrid } from './logo/OptionGrid';
 import { LogoEditor } from './logo/LogoEditor';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Copy, Check } from 'lucide-react';
 
 export default function ChatComponent() {
   const [currentModel, setCurrentModel] = useState<ModelType>('gpt-4o-mini');
@@ -19,6 +20,7 @@ export default function ChatComponent() {
   const [isGeneratingLogos, setIsGeneratingLogos] = useState(false);
   const [numOptionsDetected, setNumOptionsDetected] = useState(0);
   const [isStreamingOptions, setIsStreamingOptions] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, append } = useChat({
     api: `/api/chat?model=${currentModel}`,
@@ -138,9 +140,9 @@ export default function ChatComponent() {
             >
               <div
                 className={`
-                  relative max-w-[90%] md:max-w-[75%] lg:max-w-[65%]
+                  group relative max-w-[90%] md:max-w-[75%] lg:max-w-[65%]
                   ${message.role === 'user'
-                    ? 'bg-[#d9fdd3] ml-auto'
+                    ? 'bg-[#d9fdd3] ml-auto mr-1'
                     : message.content.includes('Option 1:')
                       ? 'w-full bg-transparent'
                       : 'bg-white'
@@ -168,15 +170,39 @@ export default function ChatComponent() {
                     messages[i - 1].content.includes('[Option')
                 )}
                 
-                {/* Message timestamp */}
+                {/* Message actions */}
                 {!message.content.includes('Option 1:') && (
-                  <div className={`text-[0.65rem] text-gray-500 text-right mt-0.5
-                    ${message.role === 'user' ? 'text-[#667781]' : ''}`}
-                  >
-                    {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  <div className="flex items-center justify-between mt-0.5">
+                    {/* Copy button with tooltip - only show for AI messages */}
+                    {message.role === 'assistant' && (
+                      <div className="relative group/tooltip">
+          <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(message.content);
+                            setCopiedMessageId(i);
+                            setTimeout(() => setCopiedMessageId(null), 2000);
+                          }}
+                          className="p-0.5 hover:bg-black/5 rounded-full transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          {copiedMessageId === i ? (
+                            <Check className="w-3.5 h-3.5 text-[#8696a0]" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5 text-[#8696a0]" />
+                          )}
+                        </button>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 text-xs text-white bg-gray-800 rounded whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none">
+                          {copiedMessageId === i ? 'Copied!' : 'Copy message'}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Timestamp */}
+                    <div className={`text-[0.65rem] text-gray-500 ${message.role === 'user' ? 'text-[#667781]' : ''}`}>
+                      {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
                   </div>
-                )}
-              </div>
+                      )}
+                    </div>
             </motion.div>
           ))}
         </AnimatePresence>
@@ -205,26 +231,26 @@ export default function ChatComponent() {
           {isStreamingOptions && (
             <div className="mt-2">
               <LoadingState numSkeletons={3 - numOptionsDetected} />
-            </div>
-          )}
+          </div>
+        )}
         </AnimatePresence>
       </div>
       
       {/* Input area */}
       <div className="bg-[#f0f2f5] px-3 py-2 shadow-sm sticky bottom-0 z-10">
-        <VisualInput
-          value={input}
-          onChange={handleInputChange}
+          <VisualInput
+            value={input}
+            onChange={handleInputChange}
           onSubmit={onSubmit}
-          contextMessage={contextMessage}
+            contextMessage={contextMessage}
           isLoading={isLoading}
           onClearContext={() => {
             setContextMessage(null);
             setSelectedOption(null);
             setIsEditing(false);
           }}
-        />
-      </div>
+          />
+        </div>
     </div>
   );
 } 

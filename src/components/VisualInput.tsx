@@ -1,6 +1,7 @@
 import React from 'react';
 import type { VisualInputProps, ContextMessage } from '../types/chat';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Send, X } from 'lucide-react';
 
 const formatContextMessage = (contextJson: string): string => {
   try {
@@ -48,9 +49,7 @@ export const VisualInput: React.FC<VisualInputProps> = ({
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="w-4 h-4" />
             </motion.button>
           </motion.div>
         )}
@@ -80,22 +79,11 @@ export const VisualInput: React.FC<VisualInputProps> = ({
           whileHover={isLoading ? {} : { scale: 1.05 }}
           whileTap={isLoading ? {} : { scale: 0.95 }}
         >
-          {value.trim() ? (
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" 
-              stroke={isLoading ? "#8696a0" : "currentColor"}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          ) : (
-            <svg className="w-6 h-6" viewBox="0 0 24 24" 
-              fill={isLoading ? "#8696a0" : "currentColor"}
-            >
-              <path d="M12 14a2 2 0 100-4 2 2 0 000 4z" />
-              <path d="M16 14a2 2 0 100-4 2 2 0 000 4z" />
-              <path d="M8 14a2 2 0 100-4 2 2 0 000 4z" />
-            </svg>
-          )}
+          <Send 
+            className="w-5 h-5" 
+            strokeWidth={2.5}
+            color={isLoading ? "#8696a0" : "currentColor"}
+          />
         </motion.button>
       </form>
     </div>
