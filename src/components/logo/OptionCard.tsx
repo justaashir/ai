@@ -34,7 +34,6 @@ export const OptionCard: React.FC<OptionCardProps> = ({
         <div className="w-full aspect-square bg-gray-50 rounded-lg flex items-center justify-center overflow-hidden">
           <div className="w-4/5 h-4/5 relative group">
             <div dangerouslySetInnerHTML={{ __html: svg }} className="w-full h-full" />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors rounded-lg" />
           </div>
         </div>
       </div>
