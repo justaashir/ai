@@ -38,7 +38,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
     >
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%" style={{display: 'block'}}>
         <circle cx="24" cy="24" r="23" fill="#008000" stroke="#003300" strokeWidth="2"></circle>
         <path d="M2,24 H46" stroke="#003300" strokeWidth="2"></path>
         <path d="M2,24 H22 M26,24 H46" fill="#FFFFFF"></path>
