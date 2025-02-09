@@ -13,7 +13,7 @@ const anthropic = createAnthropic({
 // Allow responses up to 5 minutes
 export const maxDuration = 300;
 
-const LOGO_SYSTEM_PROMPT = `You are a master SVG logo designer specializing in creating iconic, themed logos. For each request, generate 3 distinct design options.
+const LOGO_SYSTEM_PROMPT = `You are a master SVG logo designer specializing in creating iconic, themed logos. Always generate at least 3 design options. If a higher number is specifically requested (e.g. "generate 4 more", "create 5 logos"), generate that many options instead.
 
 IMPORTANT: For each option, you MUST provide both the description AND the SVG code immediately after each option description.
 
@@ -27,6 +27,8 @@ Option 2: [Brief description]
 
 Option 3: [Brief description]
 [SVG code for option 3]
+
+(Additional options if specifically requested...)
 
 Which option would you like me to implement?
 
@@ -67,10 +69,35 @@ export const POST: APIRoute = async ({ request }) => {
       m.content.toLowerCase().includes('svg')
     );
 
-    // Check if this is an iteration request (has [Option X] in the last message)
+    // Check if user requested fewer than 3 options
+    const lastMessage = messages[messages.length - 1]?.content.toLowerCase() || '';
+    const numberMatch = lastMessage.match(/generate (\d+)|create (\d+)|make (\d+)/);
+    const requestedNumber = numberMatch ? 
+      parseInt(numberMatch[1] || numberMatch[2] || numberMatch[3]) : null;
+
+    let modifiedMessages = [...messages];
+    if (requestedNumber && requestedNumber < 3) {
+      // Add a friendly message about minimum options
+      modifiedMessages = [
+        ...messages.slice(0, -1),
+        {
+          role: 'assistant',
+          content: `I'll generate 3 options for the best results, as this allows for better comparison and selection. Here they are:`
+        },
+        {
+          role: 'user',
+          content: messages[messages.length - 1].content.replace(/\d+/, '3')
+        }
+      ];
+    }
+
+    // Check if this is an iteration request
     const isIteration = messages.length > 0 && 
       messages[messages.length - 1].role === 'user' && 
-      messages[messages.length - 1].content.includes('[Option');
+      (messages[messages.length - 1].content.toLowerCase().includes('modify option') ||
+       messages[messages.length - 1].content.toLowerCase().includes('change option') ||
+       messages[messages.length - 1].content.toLowerCase().includes('update option') ||
+       /\[option \d+\].*(?:modify|change|update|adjust)/i.test(messages[messages.length - 1].content));
 
     // If it's an iteration, modify the system prompt to request only SVG
     const systemPrompt = isIteration 
@@ -83,8 +110,8 @@ export const POST: APIRoute = async ({ request }) => {
         : openai(model as 'gpt-4o-mini' | 'gpt-4o'),
       messages: isLogoRequest ? [
         { role: 'system', content: systemPrompt },
-        ...messages
-      ] : messages,
+        ...modifiedMessages
+      ] : modifiedMessages,
       temperature: isLogoRequest ? 0.7 : 0.5,
       onError: (error) => {
         console.error('Error in chat:', error);

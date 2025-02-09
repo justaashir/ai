@@ -455,7 +455,7 @@ const SVGPreview: React.FC<SVGPreviewProps> = ({
 
 const LoadingOption = () => (
   <div className="flex flex-col items-center p-4 bg-white/50 rounded-lg">
-    <div className="w-24 h-24 bg-gray-200 rounded-lg animate-pulse flex items-center justify-center">
+    <div className="w-full aspect-square bg-gray-200 rounded-lg animate-pulse flex items-center justify-center">
       <svg className="w-8 h-8 text-gray-300 animate-spin" viewBox="0 0 24 24">
         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
@@ -474,7 +474,30 @@ const OptionSelector = ({ options, onSelect, onDownload }: {
   onDownload: (svg: string) => void
 }) => {
   const [openDropdown, setOpenDropdown] = useState<number | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showLeftShadow, setShowLeftShadow] = useState(false);
+  const [showRightShadow, setShowRightShadow] = useState(false);
   
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!scrollContainerRef.current) return;
+      const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
+      setShowLeftShadow(scrollLeft > 0);
+      setShowRightShadow(scrollLeft < scrollWidth - clientWidth - 1);
+    };
+
+    const container = scrollContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll);
+      // Initial check
+      handleScroll();
+      // Check after content loads
+      setTimeout(handleScroll, 100);
+    }
+
+    return () => container?.removeEventListener('scroll', handleScroll);
+  }, [options]);
+
   const actions = [
     { icon: '🔄', action: 'Iterate', title: 'Iterate Design', prompt: 'Let\'s refine this' },
     { icon: '↔️', action: 'Make it bigger', title: 'Make it Bigger', prompt: 'Make it bigger' },
@@ -499,98 +522,119 @@ const OptionSelector = ({ options, onSelect, onDownload }: {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openDropdown]);
 
+  // Create array of slots based on requested number or minimum 3
+  const numSlots = Math.max(3, options?.length || 3);
+  const slots = Array(numSlots).fill(null);
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-4">
-      {[0, 1, 2].map(index => {
-        const option = options[index];
-        return option ? (
-          <div
-            key={index}
-            className="flex flex-col items-center p-4 bg-white/50 rounded-lg text-center"
-          >
-            <SVGPreview 
-              svgCode={option.svg} 
-              size="lg"
-              showDownload={false}
-            />
-            <div className="mt-2 text-sm text-gray-600 w-full flex flex-col items-center">
-              <span className="font-medium">Option {index + 1}</span>
-              <p className="mt-1 text-xs line-clamp-2 max-w-[200px]">{option.description}</p>
-            </div>
-            <div className="flex justify-center gap-2 mt-3">
-              <button
-                onClick={() => onDownload(option.svg)}
-                className="p-2 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-600 transition-colors"
-                title="Download SVG"
+    <div className="relative">
+      <div 
+        className={`absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-white/50 to-transparent pointer-events-none transition-opacity duration-200 ${
+          showLeftShadow ? 'opacity-100' : 'opacity-0'
+        }`}
+      />
+      <div 
+        ref={scrollContainerRef}
+        className="overflow-x-auto pb-4 -mb-4 scroll-smooth"
+      >
+        <div className="grid grid-flow-col auto-cols-[minmax(250px,1fr)] gap-4 my-4">
+          {slots.map((_, index) => {
+            const option = options?.[index];
+            return option ? (
+              <div
+                key={index}
+                className="flex flex-col items-center p-4 bg-white/50 rounded-lg text-center"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-                  <path d="M7 10l5 5 5-5" />
-                  <path d="M12 15V3" />
-                </svg>
-              </button>
-              <div className="relative dropdown-container">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpenDropdown(openDropdown === index ? null : index);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 rounded-md text-white transition-colors"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M15 4V2" />
-                    <path d="M15 22v-2" />
-                    <path d="M4 15H2" />
-                    <path d="M22 15h-2" />
-                    <path d="M19.8 9l-1.6-1.6" />
-                    <path d="M5.8 19.8L4.2 18.2" />
-                    <path d="M19.8 19.8l-1.6-1.6" />
-                    <path d="M5.8 9L4.2 7.4" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                  <span className="text-sm">Actions</span>
-                  <svg className={`w-4 h-4 ml-1 transform transition-transform ${openDropdown === index ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </button>
-                {openDropdown === index && (
-                  <div 
-                    className="dropdown-menu absolute right-0 mt-1 py-1 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-10"
-                    onClick={(e) => e.stopPropagation()}
+                <SVGPreview 
+                  svgCode={option.svg} 
+                  size="lg"
+                  showDownload={false}
+                />
+                <div className="mt-2 text-sm text-gray-600 w-full flex flex-col items-center">
+                  <span className="font-medium">Option {index + 1}</span>
+                  <p className="mt-1 text-xs line-clamp-2 max-w-[200px]">{option.description}</p>
+                </div>
+                <div className="flex justify-center gap-2 mt-3">
+                  <button
+                    onClick={() => onDownload(option.svg)}
+                    className="p-2 bg-gray-100 hover:bg-gray-200 rounded-md text-gray-600 transition-colors"
+                    title="Download SVG"
                   >
-                    {actions.map(({ icon, action, title, prompt }) => (
-                      <button
-                        key={action}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenDropdown(null);
-                          onSelect(index + 1);
-                          
-                          // Set input to the action
-                          const form = document.querySelector('form');
-                          const input = form?.querySelector('input');
-                          if (input) {
-                            const event = new Event('input', { bubbles: true });
-                            input.value = `${prompt} [Option ${index + 1}]`;
-                            input.dispatchEvent(event);
-                            form?.requestSubmit();
-                          }
-                        }}
-                        className="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                      <path d="M7 10l5 5 5-5" />
+                      <path d="M12 15V3" />
+                    </svg>
+                  </button>
+                  <div className="relative dropdown-container">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenDropdown(openDropdown === index ? null : index);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 rounded-md text-white transition-colors"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M15 4V2" />
+                        <path d="M15 22v-2" />
+                        <path d="M4 15H2" />
+                        <path d="M22 15h-2" />
+                        <path d="M19.8 9l-1.6-1.6" />
+                        <path d="M5.8 19.8L4.2 18.2" />
+                        <path d="M19.8 19.8l-1.6-1.6" />
+                        <path d="M5.8 9L4.2 7.4" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                      <span className="text-sm">Actions</span>
+                      <svg className={`w-4 h-4 ml-1 transform transition-transform ${openDropdown === index ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                    {openDropdown === index && (
+                      <div 
+                        className="dropdown-menu absolute right-0 mt-1 py-1 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-10"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <span>{icon}</span>
-                        <span>{title}</span>
-                      </button>
-                    ))}
+                        {actions.map(({ icon, action, title, prompt }) => (
+                          <button
+                            key={action}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenDropdown(null);
+                              onSelect(index + 1);
+                              
+                              // Set input to the action
+                              const form = document.querySelector('form');
+                              const input = form?.querySelector('input');
+                              if (input) {
+                                const event = new Event('input', { bubbles: true });
+                                input.value = `${prompt} [Option ${index + 1}]`;
+                                input.dispatchEvent(event);
+                                form?.requestSubmit();
+                              }
+                            }}
+                            className="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                          >
+                            <span>{icon}</span>
+                            <span>{title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
-            </div>
-          </div>
-        ) : (
-          <LoadingOption key={index} />
-        );
-      })}
+            ) : (
+              <LoadingOption key={index} />
+            );
+          })}
+        </div>
+      </div>
+      <div 
+        className={`absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white/50 to-transparent pointer-events-none transition-opacity duration-200 ${
+          showRightShadow ? 'opacity-100' : 'opacity-0'
+        }`}
+      />
     </div>
   );
 };
@@ -681,10 +725,11 @@ export default function ChatComponent() {
   const [selectedModel, setSelectedModel] = useState<ModelType>('gpt-4o-mini');
   const [isInspecting, setIsInspecting] = useState(false);
   const { messages, input, handleInputChange, handleSubmit, error, setInput, isLoading, stop } = useChat({
-    api: `/api/chat?model=${selectedModel}`
+    api: `/api/chat?model=${selectedModel}`,
   });
   const [contextMessage, setContextMessage] = useState<ContextMessage | null>(null);
   const [lastSvgCode, setLastSvgCode] = useState<string | null>(null);
+
 
   // Add useEffect to handle SVG updates
   useEffect(() => {
@@ -742,8 +787,9 @@ export default function ChatComponent() {
       // First, extract all SVGs
       const svgMatches = content.match(/<svg[\s\S]*?<\/svg>/g) || [];
       
-      // Then extract descriptions more carefully
-      const optionMatches = content.match(/Option \d+:(.*?)(?=Option \d+:|$)/gs) || [];
+      // Then extract descriptions by looking for "Option N:" patterns
+      const optionPattern = /Option \d+:(.*?)(?=Option \d+:|$)/gs;
+      const optionMatches = content.match(optionPattern) || [];
       const descriptions = optionMatches.map(match => {
         // Remove SVG code from description if present
         const cleanText = match
@@ -844,11 +890,13 @@ export default function ChatComponent() {
           
           const optionMatch = message.content.match(/\[Option (\d+)\]/);
           const isOptionMessage = optionMatch && message.role === 'user';
-          const isFirstPrompt = index <= 1 && message.role === 'assistant';
-          const isIterationResponse = !isFirstPrompt && message.role === 'assistant';
+          
+          // Determine if this is a generation response by checking for "Option 1:" pattern
+          const isGenerationResponse = message.role === 'assistant' && message.content.includes('Option 1:');
+          const isIterationResponse = !isGenerationResponse && message.role === 'assistant' && svgCode !== null;
 
           // Format the message content
-          const displayContent = formatMessageContent(message.content, isIterationResponse);
+          const displayContent = formatMessageContent(message.content, Boolean(isIterationResponse));
           
           return (
             <div key={message.id}>
@@ -861,7 +909,7 @@ export default function ChatComponent() {
               >
                 <strong className="text-sm text-gray-600">{message.role === 'user' ? 'You: ' : 'AI: '}</strong>
                 <div className="mt-1">
-                  {isFirstPrompt && options ? (
+                  {isGenerationResponse ? (
                     <>
                       <div className="text-sm mb-2">Select your preferred logo design:</div>
                       <OptionSelector 

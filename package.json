@@ -13,6 +13,7 @@
     "@ai-sdk/openai": "^1.1.9",
     "@astrojs/node": "^9.0.2",
     "@astrojs/react": "^4.2.0",
+    "@openreplay/tracker": "^15.0.3",
     "@tailwindcss/vite": "^4.0.5",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
