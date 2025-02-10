@@ -1,14 +1,12 @@
 'use client';
 
 import { useChat } from 'ai/react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { ModelType, ContextMessage } from '../types/chat';
 import { ModelSelector } from './ModelSelector';
 import { VisualInput } from './VisualInput';
-import { extractSVGCode, extractOptions, downloadSVG } from '../utils/svg';
-import { LoadingState } from './logo/LoadingState';
+import { extractOptions, downloadSVG } from '../utils/svg';
 import { OptionGrid } from './logo/OptionGrid';
-import { LogoEditor } from './logo/LogoEditor';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Copy, Check } from 'lucide-react';
 
@@ -78,19 +76,6 @@ export default function ChatComponent() {
   };
 
   const formatMessageContent = (content: string, isIterationResponse: boolean) => {
-    if (isIterationResponse) {
-      const svgCode = extractSVGCode(content);
-      if (svgCode) {
-        return (
-          <LogoEditor
-            svg={svgCode}
-            onModify={handleModification}
-            onClose={() => setIsEditing(false)}
-          />
-        );
-      }
-    }
-
     const options = extractOptions(content);
     if (options.length > 0) {
       return null; // Return null so we can handle logo grid separately

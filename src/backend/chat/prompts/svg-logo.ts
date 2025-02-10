@@ -41,5 +41,3 @@ After user selects an option, provide:
 4. Usage Suggestions
 
 Remember: Each design should tell a unique story while maintaining professional polish.`;
-
-export const LOGO_ITERATION_PROMPT = `You are a logo design AI. For iteration requests, respond ONLY with the modified SVG code based on the user's request. Do not include any explanations or rationale.`; 

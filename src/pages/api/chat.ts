@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
-import { SVGLogoHandler } from '../../services/chat/handlers/svg-logo';
-import { BaseChatHandler } from '../../services/chat/handlers/base';
-import type { ChatRequest } from '../../services/chat/types';
+import { SVGLogoHandler } from '../../backend/chat/handlers/svg-logo';
+import { BaseChatHandler } from '../../backend/chat/handlers/base';
+import type { ChatRequest } from '../../backend/chat/types';
 
 // Allow responses up to 5 minutes
 export const maxDuration = 300;

@@ -1,6 +1,5 @@
 import React, { useRef, useEffect } from 'react';
 import type { SVGPreviewProps } from '../../types/chat';
-import { QuickActions } from './QuickActions';
 
 export const SVGPreview: React.FC<SVGPreviewProps> = ({ 
   svgCode, 
@@ -38,13 +37,6 @@ export const SVGPreview: React.FC<SVGPreviewProps> = ({
           filter: 'drop-shadow(0 1px 2px rgb(0 0 0 / 0.1))'
         }}
       />
-      {showDownload && onDownload && (
-        <QuickActions
-          onAction={(action) => onElementModify?.(action)}
-          onDownload={onDownload}
-          svgCode={svgCode}
-        />
-      )}
     </div>
   );
 }; 

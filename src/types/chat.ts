@@ -39,11 +39,6 @@ export interface QuickActionProps {
   svgCode: string;
 }
 
-export interface SVGInspectorProps {
-  svgCode: string;
-  onElementSelect: (element: SVGElement) => void;
-}
-
 export interface OptionSelectorProps {
   options: { svg: string; description: string }[];
   onSelect: (index: number) => void;
