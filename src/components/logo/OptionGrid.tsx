@@ -11,6 +11,7 @@ interface OptionGridProps {
   onDownload: (svg: string) => void;
   selectedIndex?: number;
   numExpectedOptions?: number;
+  enableSelection?: boolean;
 }
 
 export const OptionGrid: React.FC<OptionGridProps> = ({
@@ -18,7 +19,8 @@ export const OptionGrid: React.FC<OptionGridProps> = ({
   onSelect,
   onDownload,
   selectedIndex,
-  numExpectedOptions = 3
+  numExpectedOptions = 3,
+  enableSelection = false
 }) => {
   // Create an array of expected option slots
   const optionSlots = Array.from({ length: numExpectedOptions }, (_, i) => {
@@ -39,6 +41,7 @@ export const OptionGrid: React.FC<OptionGridProps> = ({
         onDownload={() => option && onDownload(option.svg)}
         isSelected={selectedIndex === i}
         isLoading={isLoading}
+        enableSelection={enableSelection}
       />
     );
   }).filter(Boolean); // Remove null slots

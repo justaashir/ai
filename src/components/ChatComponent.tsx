@@ -195,6 +195,7 @@ export default function ChatComponent() {
                         options={options}
                         onSelect={(index) => handleOptionSelect(i, index, options)}
                         onDownload={downloadSVG}
+                        enableSelection={false}
                         selectedIndex={selectedMessageId === i ? selectedOption : undefined}
                       />
                     </div>
