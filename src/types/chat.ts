@@ -6,6 +6,25 @@ export interface ModelOption {
   description: string;
 }
 
+export interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  description?: string;
+  image?: string;
+  models: ModelType[];
+  createdAt: Date;
+}
+
+export interface GroupMessage extends Message {
+  modelId?: ModelType;
+  mentionedModel?: ModelType;
+}
+
 export interface SVGPreviewProps {
   svgCode: string;
   onDownload?: () => void;
