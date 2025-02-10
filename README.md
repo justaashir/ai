@@ -1,48 +1,97 @@
-# Astro Starter Kit: Basics
+# AI Chat Application
 
-```sh
-npm create astro@latest -- --template basics
+A modern web application built with Astro and React that provides an intelligent chat interface with AI capabilities. The application supports multiple AI models and includes features for SVG handling and visual interactions.
+
+## ✨ Features
+
+- 🤖 Multi-model AI chat support (Anthropic, OpenAI)
+- 🎨 Modern, responsive UI built with React and Tailwind CSS
+- 🖼️ SVG preview and manipulation capabilities
+- ⚡ Fast performance with Astro's static site generation
+- 📱 Mobile-friendly design
+- 🔄 Real-time chat interactions
+- 🎯 OpenReplay integration for analytics
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js (Latest LTS version recommended)
+- npm or yarn package manager
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone [your-repository-url]
+cd ai
 ```
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/withastro/astro/tree/latest/examples/basics)
-[![Open with CodeSandbox](https://assets.codesandbox.io/github/button-edit-lime.svg)](https://codesandbox.io/p/sandbox/github/withastro/astro/tree/latest/examples/basics)
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/withastro/astro?devcontainer_path=.devcontainer/basics/devcontainer.json)
+2. Install dependencies:
+```bash
+npm install
+```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+3. Set up environment variables:
+Create a `.env` file in the root directory with the following variables:
+```env
+# Add your required environment variables here
+ANTHROPIC_API_KEY=your_key_here
+OPENAI_API_KEY=your_key_here
+```
 
-![just-the-basics](https://github.com/withastro/astro/assets/2244813/a0a5533c-a856-4198-8470-2d67b1d7c554)
+## 🛠️ Development
 
-## 🚀 Project Structure
+Start the development server:
+```bash
+npm run dev
+```
+The application will be available at `http://localhost:4321`
 
-Inside of your Astro project, you'll see the following folders and files:
+## 📦 Build
+
+Create a production build:
+```bash
+npm run build
+```
+
+Preview the production build:
+```bash
+npm run preview
+```
+
+## 🧱 Project Structure
 
 ```text
 /
-├── public/
-│   └── favicon.svg
 ├── src/
-│   ├── layouts/
-│   │   └── Layout.astro
-│   └── pages/
-│       └── index.astro
-└── package.json
-```
+│   ├── assets/          # Static assets (SVGs, images)
+│   ├── components/      # React components
+│   │   ├── logo/       # Logo-related components
+│   │   └── svg/        # SVG handling components
+│   ├── layouts/        # Astro layout components
+│   ├── pages/          # Astro pages and API routes
+│   │   └── api/        # API endpoints
+│   ├── styles/         # Global styles
+│   ├── types/          # TypeScript type definitions
+│   ├── utils/          # Utility functions
+│   └── backend/        # Backend configuration
+└── public/             # Public static files
 
-To learn more about the folder structure of an Astro project, refer to [our guide on project structure](https://docs.astro.build/en/basics/project-structure/).
+## 🔧 Technologies
 
-## 🧞 Commands
+- [Astro](https://astro.build/) - Web framework
+- [React](https://reactjs.org/) - UI components
+- [Tailwind CSS](https://tailwindcss.com/) - Styling
+- [Framer Motion](https://www.framer.com/motion/) - Animations
+- [@ai-sdk](https://www.npmjs.com/package/ai) - AI integration
+- [OpenReplay](https://openreplay.com/) - Analytics and monitoring
 
-All commands are run from the root of the project, from a terminal:
+## 📄 License
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+[Add your license information here]
 
-## 👀 Want to learn more?
+## 👥 Contributing
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+[Add contribution guidelines here]
+
