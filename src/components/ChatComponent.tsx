@@ -3,6 +3,7 @@
 import { useChat } from 'ai/react';
 import { useState, useEffect } from 'react';
 import type { ModelType, ContextMessage, Group, GroupMessage } from '../types/chat';
+import type { Character } from '../types';
 import { ModelSelector } from './ModelSelector';
 import { VisualInput } from './VisualInput';
 import { extractOptions, downloadSVG } from '../utils/svg';
@@ -10,6 +11,7 @@ import { OptionGrid } from './logo/OptionGrid';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Copy, Check, Users, ArrowLeft } from 'lucide-react';
 import { CreateGroupModal } from './CreateGroupModal';
+import { shows, getAllCharacters, getCharacterById, getShowById } from '../config';
 
 const AVAILABLE_MODELS: { id: ModelType; name: string }[] = [
   { id: 'gpt-4o-mini', name: 'GPT-4 Optimized Mini' },
@@ -18,7 +20,9 @@ const AVAILABLE_MODELS: { id: ModelType; name: string }[] = [
 ];
 
 export default function ChatComponent() {
-  const [currentModel, setCurrentModel] = useState<ModelType>('gpt-4o-mini');
+  const [activeShow, setActiveShow] = useState<string | null>(null);
+  const [activeCharacters, setActiveCharacters] = useState<Set<string>>(new Set());
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [contextMessage, setContextMessage] = useState<ContextMessage | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<number | null>(null);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -27,62 +31,58 @@ export default function ChatComponent() {
   const [numOptionsDetected, setNumOptionsDetected] = useState(0);
   const [isStreamingOptions, setIsStreamingOptions] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
-  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
-  
-  // New state for group chat
-  const [activeGroup, setActiveGroup] = useState<Group | null>(null);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [mentionedModel, setMentionedModel] = useState<ModelType | null>(null);
-  const [showModelSuggestions, setShowModelSuggestions] = useState(false);
-  const [modelSuggestions, setModelSuggestions] = useState<typeof AVAILABLE_MODELS>([]);
+  const [mentionedCharacter, setMentionedCharacter] = useState<string | null>(null);
+  const [showCharacterSuggestions, setShowCharacterSuggestions] = useState(false);
+  const [characterSuggestions, setCharacterSuggestions] = useState<ReturnType<typeof getAllCharacters>>([]);
   const [cursorPosition, setCursorPosition] = useState<number>(0);
-
   const [localMessages, setLocalMessages] = useState<GroupMessage[]>([]);
 
-  const { messages: aiMessages, input, handleInputChange, handleSubmit, isLoading, append } = useChat({
-    api: `/api/chat?model=${mentionedModel || currentModel}${activeGroup ? `&groupId=${activeGroup.id}` : ''}`,
-    onResponse: (response) => {
+  const currentShow = activeShow ? getShowById(activeShow) : null;
+  const currentCharacter = mentionedCharacter ? getCharacterById(mentionedCharacter) : null;
+
+  const { messages: aiMessages, input, handleInputChange, handleSubmit: originalHandleSubmit, isLoading, append } = useChat({
+    api: `/api/chat?model=${currentCharacter?.baseModel || 'gpt-4o-mini'}`,
+    onResponse: () => {
       setContextMessage(null);
       setIsGeneratingLogos(false);
       setIsStreamingOptions(false);
-      setMentionedModel(null);
-      if (isGeneratingLogos) {
-        const optionMatches = response.toString().match(/Option \d+:/g);
-        const newNumOptions = optionMatches ? optionMatches.length : 0;
-        
-        if (newNumOptions > numOptionsDetected) {
-          setNumOptionsDetected(newNumOptions);
-          if (numOptionsDetected === 0 && newNumOptions === 1) {
-            setIsStreamingOptions(true);
-          }
-          if (newNumOptions >= 3) {
-            setIsStreamingOptions(false);
-          }
-        }
-      }
     },
     onFinish: (message) => {
-      const messageWithModel = {
+      // Extract character name from response format [Character Name] Message
+      const characterMatch = message.content.match(/^\[([\w\s-]+)\]/);
+      const characterName = characterMatch ? characterMatch[1].trim() : null;
+      const character = characterName ? getAllCharacters().find(c => c.name === characterName) : null;
+      const cleanContent = characterMatch 
+        ? message.content.replace(/^\[[\w\s-]+\]\s*/, '')
+        : message.content;
+
+      const messageWithCharacter = {
         ...message,
-        modelId: mentionedModel || currentModel
+        content: cleanContent,
+        characterId: character?.id || null,
+        showId: activeShow,
+        timestamp: new Date()
       } as GroupMessage;
-      setLocalMessages(prev => [...prev, messageWithModel]);
+      setLocalMessages(prev => [...prev, messageWithCharacter]);
     }
   });
 
-  const handleCreateGroup = (name: string, description: string, model: ModelType, image?: File) => {
-    // Create a new group
-    const newGroup: Group = {
-      id: Date.now().toString(), // In real app, this would come from the backend
-      name,
-      description,
-      image: image ? URL.createObjectURL(image) : undefined,
-      models: [model],
-      createdAt: new Date()
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+
+    // Add user message to local messages first
+    const userMessage: GroupMessage = {
+      role: 'user',
+      content: input,
+      characterId: mentionedCharacter,
+      showId: activeShow,
+      timestamp: new Date()
     };
+    setLocalMessages(prev => [...prev, userMessage]);
     
-    setGroups(prev => [...prev, newGroup]);
-    setActiveGroup(newGroup);
+    // Then send to API
+    await originalHandleSubmit(e);
   };
 
   const handleInputWithMention = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,92 +91,57 @@ export default function ChatComponent() {
     setCursorPosition(cursorPos);
     handleInputChange(e);
 
-    // Check for @model mentions
+    // Check for @character mentions
     const beforeCursor = value.slice(0, cursorPos);
     const mentionMatch = beforeCursor.match(/@(\w*)$/);
     
     if (mentionMatch) {
       const searchTerm = mentionMatch[1].toLowerCase();
-      const suggestions = AVAILABLE_MODELS.filter(model => 
-        model.id.toLowerCase().includes(searchTerm) || 
-        model.name.toLowerCase().includes(searchTerm)
+      const availableCharacters = currentShow 
+        ? currentShow.characters.map(char => ({
+            ...char,
+            showId: currentShow.id,
+            showName: currentShow.name
+          }))
+        : getAllCharacters();
+      
+      const suggestions = availableCharacters.filter(char => 
+        char.name.toLowerCase().includes(searchTerm) || 
+        char.role.toLowerCase().includes(searchTerm)
       );
-      setModelSuggestions(suggestions);
-      setShowModelSuggestions(true);
+      setCharacterSuggestions(suggestions);
+      setShowCharacterSuggestions(true);
     } else {
-      setShowModelSuggestions(false);
+      setShowCharacterSuggestions(false);
     }
 
-    // Check for complete mentions
-    const completeMentionMatches = Array.from(value.matchAll(/@(gpt-4o-mini|gpt-4o|claude-3-sonnet)/g));
+    // Check for complete mentions - updated to handle hyphenated IDs
+    const completeMentionMatches = Array.from(value.matchAll(/@([\w-]+)/g));
     if (completeMentionMatches.length > 0) {
-      // Use the last mentioned model as the primary one
+      const newActiveCharacters = new Set<string>();
+      completeMentionMatches.forEach(match => {
+        const character = getAllCharacters().find(char => char.id === match[1]);
+        if (character?.id) {
+          newActiveCharacters.add(character.id);
+        }
+      });
+      setActiveCharacters(newActiveCharacters);
+      // Set the last mentioned character as the primary one for the message
       const lastMention = completeMentionMatches[completeMentionMatches.length - 1];
-      setMentionedModel(lastMention[1] as ModelType);
-    } else {
-      setMentionedModel(null);
+      const lastCharacter = getAllCharacters().find(char => char.id === lastMention[1]);
+      if (lastCharacter?.id) {
+        setMentionedCharacter(lastCharacter.id);
+      }
     }
   };
 
-  const insertModelMention = (model: ModelType) => {
+  const insertCharacterMention = (characterId: string) => {
     const beforeMention = input.slice(0, cursorPosition).replace(/@\w*$/, '');
     const afterMention = input.slice(cursorPosition);
-    const newValue = `${beforeMention}@${model}${afterMention}`;
+    const newValue = `${beforeMention}@${characterId}${afterMention}`;
     handleInputChange({ target: { value: newValue } } as React.ChangeEvent<HTMLInputElement>);
-    setShowModelSuggestions(false);
-  };
-
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const inputValue = input.toLowerCase();
-    setIsGeneratingLogos(inputValue.includes('logo') || inputValue.includes('design'));
-    setNumOptionsDetected(0);
-    setIsStreamingOptions(false);
-    
-    // Extract all model mentions
-    const modelMentions = Array.from(input.matchAll(/@(gpt-4o-mini|gpt-4o|claude-3-sonnet)/g))
-      .map(match => match[1] as ModelType);
-    
-    // If there are multiple models mentioned, create separate messages for each
-    if (modelMentions.length > 1) {
-      // Create user message for each model
-      modelMentions.forEach(modelId => {
-        append({
-          role: 'user',
-          content: input,
-        }, {
-          options: {
-            body: {
-              model: modelId
-            }
-          }
-        });
-      });
-      
-      // Clear input after sending
-      handleInputChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>);
-    } else {
-      // Regular submission for single model
-      handleSubmit(e);
-    }
-  };
-
-  const handleOptionSelect = (messageId: number, index: number, options: { svg: string; description: string }[]) => {
-    setSelectedMessageId(messageId);
-    setSelectedOption(index);
-    setIsEditing(true);
-    setContextMessage({ 
-      type: 'option', 
-      optionNumber: index + 1, 
-      svg: options[index].svg 
-    });
-  };
-
-  const handleModification = (action: string) => {
-    append({
-      role: 'user',
-      content: `${action} [Option ${selectedOption! + 1}]`
-    });
+    setShowCharacterSuggestions(false);
+    setMentionedCharacter(characterId);
   };
 
   const formatMessageContent = (content: string, isIterationResponse: boolean) => {
@@ -192,123 +157,194 @@ export default function ChatComponent() {
     );
   };
 
+  // Update the message display to show character names
+  const getMessageSender = (message: GroupMessage) => {
+    if (message.role === 'user') return 'You';
+    
+    const character = message.characterId ? getCharacterById(message.characterId) : undefined;
+    if (!character) return 'Assistant';
+    
+    return `${character.name} (${character.role})`;
+  };
+
+  // When a show is selected, keep its characters active
+  useEffect(() => {
+    if (activeShow) {
+      const showCharacters = getShowById(activeShow)?.characters || [];
+      setActiveCharacters(new Set(showCharacters.map((char: Character) => char.id)));
+    } else {
+      setActiveCharacters(new Set());
+    }
+  }, [activeShow]);
+
   return (
-    <div className="flex flex-col h-[100dvh] max-h-[100dvh] bg-[#efeae2]">
-      {/* Chat header */}
-      <div className="bg-[#f0f2f5] px-3 py-2 flex items-center justify-between shadow-sm z-10">
-        {activeGroup ? (
-          <>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setActiveGroup(null)}
-                className="p-1.5 hover:bg-black/5 rounded-full transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5 text-[#54656f]" />
-              </button>
+    <div className="flex h-[100dvh] max-h-[100dvh] bg-[#efeae2]">
+      {/* Sidebar */}
+      <div className={`
+        w-80 bg-white border-r border-gray-200 flex flex-col
+        ${isSidebarOpen ? 'block' : 'hidden'}
+      `}>
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-800">TV Show Chats</h1>
+            <p className="text-sm text-gray-500">Chat with your favorite characters</p>
+          </div>
+          <button
+            onClick={() => setIsSidebarOpen(false)}
+            className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {Object.values(shows).map(show => (
+            <div
+              key={show.id}
+              onClick={() => setActiveShow(show.id)}
+              className={`
+                p-3 rounded-lg cursor-pointer transition-colors
+                ${activeShow === show.id ? 'bg-[#e7f8f5]' : 'hover:bg-gray-50'}
+              `}
+            >
               <div className="flex items-center gap-3">
-                {activeGroup.image ? (
+                {show.image ? (
                   <img
-                    src={activeGroup.image}
-                    alt={activeGroup.name}
-                    className="w-10 h-10 rounded-full object-cover"
+                    src={show.image}
+                    alt={show.name}
+                    className="w-12 h-12 rounded-lg object-contain bg-white p-1"
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-[#00a884] flex items-center justify-center">
-                    <span className="text-white text-lg font-semibold">
-                      {activeGroup.name.charAt(0).toUpperCase()}
+                  <div className="w-12 h-12 rounded-lg bg-[#00a884] flex items-center justify-center">
+                    <span className="text-white text-xl font-semibold">
+                      {show.name.charAt(0)}
                     </span>
                   </div>
                 )}
                 <div>
-                  <h2 className="font-semibold text-[#111b21]">{activeGroup.name}</h2>
-                  <div className="flex items-center gap-1.5">
-                    {activeGroup.models.map((model, i) => (
+                  <h3 className="font-semibold text-gray-800">{show.name}</h3>
+                  <p className="text-sm text-gray-500">{show.description}</p>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    {show.characters.map(char => (
                       <span
-                        key={model}
-                        className="text-xs px-1.5 py-0.5 bg-[#e7f8f5] text-[#00a884] rounded"
+                        key={char.id}
+                        className="text-xs px-1.5 py-0.5 bg-[#e7f8f5] text-[#00a884] rounded flex items-center gap-1"
                       >
-                        {model}
+                        <span>{char.avatar}</span>
+                        <span>{char.name}</span>
                       </span>
                     ))}
                   </div>
                 </div>
               </div>
             </div>
-          </>
-        ) : (
-          <>
-            <ModelSelector currentModel={currentModel} onModelChange={setCurrentModel} />
-            <button
-              onClick={() => setIsCreateGroupModalOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-[#00a884] text-white rounded-lg hover:bg-[#008f6f] transition-colors focus:outline-none focus:ring-2 focus:ring-[#00a884] focus:ring-offset-2"
-            >
-              <Users className="w-4 h-4" />
-              <span>New Group</span>
-            </button>
-          </>
-        )}
+          ))}
+        </div>
       </div>
-      
-      {/* Group list or chat messages */}
-      <div className="flex-1 overflow-y-auto space-y-1 p-2" style={{ 
-        backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%23ffffff' fill-opacity='0.1' fill-rule='evenodd'/%3E%3C/svg%3E")`,
-        backgroundAttachment: 'fixed'
-      }}>
-        {!activeGroup ? (
-          // Show group list
-          <div className="grid grid-cols-1 gap-2">
-            {groups.map(group => (
-              <motion.div
-                key={group.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-lg p-3 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
-                onClick={() => setActiveGroup(group)}
+
+      {/* Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Chat header */}
+        <div className="bg-[#f0f2f5] px-3 py-2 flex items-center justify-between shadow-sm z-10">
+          <div className="flex items-center gap-3">
+            {!isSidebarOpen && (
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="p-1.5 hover:bg-black/5 rounded-full transition-colors"
               >
-                <div className="flex items-center gap-3">
-                  {group.image ? (
-                    <img
-                      src={group.image}
-                      alt={group.name}
-                      className="w-12 h-12 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-[#00a884] flex items-center justify-center">
-                      <span className="text-white text-xl font-semibold">
-                        {group.name.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                  )}
-                  <div>
-                    <h3 className="font-semibold text-[#111b21]">{group.name}</h3>
-                    {group.description && (
-                      <p className="text-sm text-gray-500 line-clamp-1">{group.description}</p>
-                    )}
-                    <div className="flex items-center gap-1.5 mt-1">
-                      {group.models.map(model => (
-                        <span
-                          key={model}
-                          className="text-xs px-1.5 py-0.5 bg-[#e7f8f5] text-[#00a884] rounded"
-                        >
-                          {model}
-                        </span>
-                      ))}
-                    </div>
+                <ArrowLeft className="w-5 h-5 text-[#54656f]" />
+              </button>
+            )}
+            {currentShow ? (
+              <div className="flex items-center gap-3">
+                {currentShow.image ? (
+                  <img
+                    src={currentShow.image}
+                    alt={currentShow.name}
+                    className="w-10 h-10 rounded-lg object-contain bg-white p-1"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-[#00a884] flex items-center justify-center">
+                    <span className="text-white text-lg font-semibold">
+                      {currentShow.name.charAt(0)}
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <h2 className="font-semibold text-[#111b21]">{currentShow.name}</h2>
+                  <div className="text-xs text-gray-500">
+                    Use @ to mention a character
                   </div>
                 </div>
-              </motion.div>
-            ))}
+              </div>
+            ) : (
+              <div className="text-lg font-semibold text-gray-800">
+                Select a TV Show to start chatting
+              </div>
+            )}
           </div>
-        ) : (
-          // Show chat messages
+        </div>
+        
+        {/* Group list or chat messages */}
+        <div className="flex-1 overflow-y-auto space-y-1 p-2" style={{ 
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%23ffffff' fill-opacity='0.1' fill-rule='evenodd'/%3E%3C/svg%3E")`,
+          backgroundAttachment: 'fixed'
+        }}>
+          {!currentShow ? (
+            // Show group list
+            <div className="grid grid-cols-1 gap-2">
+              {Object.values(shows).map(show => (
+                <motion.div
+                  key={show.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-white rounded-lg p-3 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => setActiveShow(show.id)}
+                >
+                  <div className="flex items-center gap-3">
+                    {show.image ? (
+                      <img
+                        src={show.image}
+                        alt={show.name}
+                        className="w-12 h-12 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-[#00a884] flex items-center justify-center">
+                        <span className="text-white text-xl font-semibold">
+                          {show.name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+                    <div>
+                      <h3 className="font-semibold text-[#111b21]">{show.name}</h3>
+                      {show.description && (
+                        <p className="text-sm text-gray-500 line-clamp-1">{show.description}</p>
+                      )}
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {show.characters.map(char => (
+                          <span
+                            key={char.id}
+                            className="text-xs px-1.5 py-0.5 bg-[#e7f8f5] text-[#00a884] rounded"
+                          >
+                            {char.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            // Show chat messages
             <AnimatePresence mode="wait">
               {localMessages.map((message, i) => {
                 const options = message.role === 'assistant' ? extractOptions(message.content) : [];
                 const hasOptions = options.length > 0;
-                const modelName = message.role === 'assistant' && message.modelId ? 
-                  AVAILABLE_MODELS.find(m => m.id === message.modelId)?.name :
+                const modelName = message.role === 'assistant' && message.characterId ? 
+                  AVAILABLE_MODELS.find(m => m.id === message.characterId)?.name :
                   undefined;
-              const groupMessage = message as GroupMessage;
+                const groupMessage = message as GroupMessage;
                 
                 return (
                   <motion.div
@@ -323,13 +359,12 @@ export default function ChatComponent() {
                         {/* Profile picture for assistant */}
                         {message.role === 'assistant' && (
                           <div className="w-8 h-8 rounded-full bg-[#00a884] flex-shrink-0 flex items-center justify-center shadow-sm">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-5 h-5">
-                              <circle cx="24" cy="24" r="20" fill="#FFFFFF" />
-                              <path d="M2,24 H46" stroke="#00a884" strokeWidth="2" />
-                              <path d="M2,24 H22 M26,24 H46" fill="#FFFFFF" />
-                              <circle cx="24" cy="24" r="6" fill="#00a884" />
-                              <circle cx="24" cy="24" r="4" fill="#FFFFFF" />
-                            </svg>
+                            {message.characterId && (() => {
+                              const character = getCharacterById(message.characterId);
+                              return character ? (
+                                <div className="text-white text-sm">{character.avatar}</div>
+                              ) : null;
+                            })()}
                           </div>
                         )}
                         
@@ -360,11 +395,7 @@ export default function ChatComponent() {
                               ? 'text-[#1fa855]' 
                               : 'text-[#53bdeb]'
                           }`}>
-                            {message.role === 'user' ? 'You' : (
-                              message.modelId 
-                                ? AVAILABLE_MODELS.find(m => m.id === message.modelId)?.name 
-                                : 'Assistant'
-                            )}
+                            {getMessageSender(message)}
                           </div>
 
                           {/* Message content */}
@@ -411,16 +442,25 @@ export default function ChatComponent() {
                       </div>
                     )}
 
-                  {/* Logo options grid - outside message bubble */}
+                    {/* Logo options grid - outside message bubble */}
                     {hasOptions && message.role === 'assistant' && (
                       <div className="flex justify-start w-full">
                         <div className="w-[70%]">
                           <OptionGrid
                             options={options}
-                            onSelect={(index) => handleOptionSelect(i, index, options)}
+                            onSelect={(index) => {
+                              setSelectedMessageId(i);
+                              setSelectedOption(index);
+                              setIsEditing(true);
+                              setContextMessage({ 
+                                type: 'option', 
+                                optionNumber: index + 1, 
+                                svg: options[index].svg 
+                              });
+                            }}
                             onDownload={downloadSVG}
                             enableSelection={false}
-                            selectedIndex={selectedMessageId === i ? selectedOption : undefined}
+                            selectedIndex={selectedMessageId === i && selectedOption !== null ? selectedOption : undefined}
                           />
                         </div>
                       </div>
@@ -429,11 +469,11 @@ export default function ChatComponent() {
                 );
               })}
             </AnimatePresence>
-        )}
+          )}
 
-        <AnimatePresence>
-          {/* Loading dots for both regular messages and logo generation */}
-          {isLoading && !localMessages.some(m => m.role === 'assistant' && m.content) && (
+          <AnimatePresence>
+            {/* Loading dots for both regular messages and logo generation */}
+            {isLoading && !localMessages.some(m => m.role === 'assistant' && m.content) && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -446,72 +486,58 @@ export default function ChatComponent() {
                     <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse delay-75" />
                     <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse delay-150" />
                   </div>
-                {/* Message tail */}
+                  {/* Message tail */}
                   <div className="absolute top-0 -left-1.5">
                     <div className="w-4 h-4 transform rotate-45 bg-white translate-x-1/2" />
                   </div>
                 </div>
               </motion.div>
             )}
-        </AnimatePresence>
-      </div>
-      
-      {/* Input area */}
-      <div className="bg-[#f0f2f5] px-3 py-2 shadow-sm z-10">
-        <div className="relative">
-          <VisualInput
-            value={input}
-            onChange={handleInputWithMention}
-            onSubmit={onSubmit}
-            contextMessage={contextMessage}
-            onClearContext={() => {
-              setContextMessage(null);
-              setSelectedOption(null);
-              setIsEditing(false);
-            }}
-          />
-          
-          {/* Model suggestions */}
-          {showModelSuggestions && modelSuggestions.length > 0 && (
-            <div className="absolute bottom-full left-0 mb-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-              {modelSuggestions.map((model) => (
-                <div
-                  key={model.id}
-                  onClick={() => insertModelMention(model.id)}
-                  className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2"
-                >
-                  <div className="w-2 h-2 rounded-full bg-[#00a884]" />
-                  <div>
-                    <div className="text-sm font-medium">{model.name}</div>
-                    <div className="text-xs text-gray-500">{model.id}</div>
+          </AnimatePresence>
+        </div>
+        
+        {/* Input area */}
+        <div className="bg-[#f0f2f5] px-3 py-2 shadow-sm z-10">
+          <div className="relative">
+            <VisualInput
+              value={input}
+              onChange={handleInputWithMention}
+              onSubmit={handleSubmit}
+              contextMessage={contextMessage}
+              onClearContext={() => {
+                setContextMessage(null);
+                setSelectedOption(null);
+                setIsEditing(false);
+              }}
+            />
+            
+            {/* Character suggestions */}
+            {showCharacterSuggestions && characterSuggestions.length > 0 && (
+              <div className="absolute bottom-full left-0 mb-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                {characterSuggestions.map((char) => (
+                  <div
+                    key={char.id}
+                    onClick={() => insertCharacterMention(char.id)}
+                    className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2"
+                  >
+                    <div className="text-lg">{char.avatar}</div>
+                    <div>
+                      <div className="text-sm font-medium">{char.name}</div>
+                      <div className="text-xs text-gray-500">{char.role}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-          
-          {mentionedModel && (
-            <div className="text-xs text-[#00a884] mt-1 ml-1">
-              Using {AVAILABLE_MODELS.find(m => m.id === mentionedModel)?.name} for this message
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+            
+            {mentionedCharacter && (
+              <div className="text-xs text-[#00a884] mt-1 ml-1">
+                Talking to {getCharacterById(mentionedCharacter)?.name}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      <CreateGroupModal
-        isOpen={isCreateGroupModalOpen}
-        onClose={() => setIsCreateGroupModalOpen(false)}
-        onCreateGroup={(name, description, models, image) => {
-          handleCreateGroup(name, description, models[0], image);
-          // Update group's available models
-          if (activeGroup) {
-            setActiveGroup({
-              ...activeGroup,
-              models: models
-            });
-          }
-        }}
-      />
     </div>
   );
 } 

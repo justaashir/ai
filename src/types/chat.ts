@@ -1,4 +1,10 @@
-export type ModelType = 'gpt-4o-mini' | 'gpt-4o' | 'claude-3-sonnet';
+export type ModelType = 
+  | 'gpt-4o-mini' 
+  | 'gpt-4o' 
+  | 'claude-3-sonnet'
+  | 'gpt-4o-mini-michael'
+  | 'gpt-4o-mini-richard'
+  | 'gpt-4o-mini-tyrion';
 
 export interface ModelOption {
   id: ModelType;
@@ -21,8 +27,9 @@ export interface Group {
 }
 
 export interface GroupMessage extends Message {
-  modelId?: ModelType;
-  mentionedModel?: ModelType;
+  characterId?: string;
+  showId?: string;
+  timestamp?: Date;
 }
 
 export interface SVGPreviewProps {
@@ -67,7 +74,7 @@ export interface OptionSelectorProps {
 export interface VisualInputProps {
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onSubmit: (e: React.FormEvent) => void;
+  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   contextMessage?: ContextMessage | null;
   onClearContext: () => void;
 } 
