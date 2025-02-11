@@ -37,8 +37,8 @@ export interface ChatResponse {
 
 // Constants for chat control
 export const CHAT_CONSTANTS = {
-  MIN_ASSISTANT_DELAY_MS: 2000,
-  MAX_ASSISTANT_DELAY_MS: 2500,
+  MIN_ASSISTANT_DELAY_MS: 0,
+  MAX_ASSISTANT_DELAY_MS: 0,
   MAX_CHAIN_LENGTH: 20,
   TERMINATE_COMMAND: 'terminate'
 } as const;

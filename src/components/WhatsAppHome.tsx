@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useChat } from 'ai/react';
 import { Search, Plus, ArrowLeft, MoreVertical, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,6 +9,13 @@ import { CHAT_CONSTANTS } from '../backend/chat/types';
 import type { Message } from 'ai';
 import { VisualInput } from './VisualInput';
 import type { ContextMessage } from '../types/chat';
+import localforage from 'localforage';
+
+// Initialize localforage
+localforage.config({
+  name: 'whatsapp-clone',
+  storeName: 'chats'
+});
 
 interface Chat {
   id: string;
@@ -37,11 +44,95 @@ export default function WhatsAppHome() {
   const [cursorPosition, setCursorPosition] = useState<number>(0);
   const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
   const [shouldRegenerate, setShouldRegenerate] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
+  // Load chats from storage on component mount
+  useEffect(() => {
+    const loadChats = async () => {
+      try {
+        const storedChats = await localforage.getItem<Chat[]>('chats');
+        if (storedChats) {
+          // Convert stored ISO date strings back to Date objects
+          const processedChats = storedChats.map(chat => ({
+            ...chat,
+            timestamp: chat.timestamp ? new Date(chat.timestamp) : undefined,
+            messages: chat.messages.map(msg => ({
+              ...msg,
+              timestamp: msg.timestamp ? new Date(msg.timestamp) : undefined
+            }))
+          }));
+          setActiveChats(processedChats);
+          
+          // If there was a selected chat, restore it
+          const lastSelectedChatId = await localforage.getItem<string>('selectedChatId');
+          if (lastSelectedChatId) {
+            const lastSelectedChat = processedChats.find(chat => chat.id === lastSelectedChatId);
+            if (lastSelectedChat) {
+              setSelectedChat(lastSelectedChat);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading chats:', error);
+      }
+    };
+    
+    loadChats();
+  }, []);
+
+  // Save chats whenever they change
+  useEffect(() => {
+    const saveChats = async () => {
+      try {
+        setIsSaving(true);
+        await localforage.setItem('chats', activeChats);
+        if (selectedChat) {
+          await localforage.setItem('selectedChatId', selectedChat.id);
+        } else {
+          await localforage.removeItem('selectedChatId');
+        }
+      } catch (error) {
+        console.error('Error saving chats:', error);
+      } finally {
+        setIsSaving(false);
+      }
+    };
+    
+    saveChats();
+  }, [activeChats, selectedChat]);
+
+  // Clear terminated chat data
+  const clearTerminatedChat = async (chatId: string) => {
+    try {
+      setActiveChats(prev => prev.map(chat => 
+        chat.id === chatId 
+          ? { ...chat, chainLength: 0, chainId: undefined, messages: [] }
+          : chat
+      ));
+      
+      if (selectedChat?.id === chatId) {
+        setSelectedChat(prev => prev ? { ...prev, chainLength: 0, chainId: undefined, messages: [] } : null);
+      }
+    } catch (error) {
+      console.error('Error clearing terminated chat:', error);
+    }
+  };
+
+  // Clear all chats
+  const clearAllChats = async () => {
+    try {
+      await localforage.clear();
+      setActiveChats([]);
+      setSelectedChat(null);
+    } catch (error) {
+      console.error('Error clearing all chats:', error);
+    }
+  };
+
   const { messages: aiMessages, input, handleInputChange, handleSubmit: originalHandleSubmit, isLoading, append, reload, stop } = useChat({
     id: selectedChat?.id,
-    initialMessages: selectedChat?.messages || [],
-    api: `/api/chat?model=${selectedChat?.type === 'individual' ? getCharacterById(selectedChat.id)?.baseModel : 'gpt-4o-mini'}`,
+    api: `/api/chat?model=${selectedChat?.type === 'individual' ? getCharacterById(selectedChat.id)?.baseModel : 'gpt-4o-mini'}&character=${selectedChat?.type === 'individual' ? selectedChat.id : ''}`,
     onResponse: () => {
       if (selectedChat) {
         setActiveChats(prev => prev.map(chat => 
@@ -104,30 +195,33 @@ export default function WhatsAppHome() {
         timestamp: new Date(Date.now())
       };
 
-      // Update chat with new message
-      setActiveChats(prev => {
-        const updatedChats = prev.map(chat => 
-          chat.id === selectedChat.id 
-            ? {
-                ...chat,
-                lastMessage: cleanContent,
-                timestamp: new Date(),
-                messages: [...chat.messages, messageWithCharacter]
-              }
-            : chat
-        );
-        
-        // If selectedChat exists in prev, find and update it
-        const updatedSelectedChat = updatedChats.find(chat => chat.id === selectedChat.id);
-        if (updatedSelectedChat) {
-          setSelectedChat(updatedSelectedChat);
-        }
-        
-        return updatedChats;
-      });
+      // Only add the message if it's complete (not interrupted)
+      if (!shouldRegenerate) {
+        // Update chat with new message
+        setActiveChats(prev => {
+          const updatedChats = prev.map(chat => 
+            chat.id === selectedChat.id 
+              ? {
+                  ...chat,
+                  lastMessage: cleanContent,
+                  timestamp: new Date(),
+                  messages: [...chat.messages, messageWithCharacter]
+                }
+              : chat
+          );
+          
+          // If selectedChat exists in prev, find and update it
+          const updatedSelectedChat = updatedChats.find(chat => chat.id === selectedChat.id);
+          if (updatedSelectedChat) {
+            setSelectedChat(updatedSelectedChat);
+          }
+          
+          return updatedChats;
+        });
+      }
 
       // Only continue the chain for group chats and if not already at max length
-      if (selectedChat.type === 'group' && selectedChat.chainLength < CHAT_CONSTANTS.MAX_CHAIN_LENGTH) {
+      if (!shouldRegenerate && selectedChat.type === 'group' && selectedChat.chainLength < CHAT_CONSTANTS.MAX_CHAIN_LENGTH) {
         // Check for @ mentions in the assistant's response
         const mentions = Array.from(cleanContent.matchAll(/@([\w-]+)/g));
         if (mentions.length > 0) {
@@ -170,7 +264,7 @@ export default function WhatsAppHome() {
           }
         }
       } else {
-        // Reset chain when no mentions or at max length
+        // Reset chain when no mentions or at max length or in individual chat
         setActiveChats(prev => {
           const updatedChats = prev.map(chat => 
             chat.id === selectedChat.id 
@@ -197,25 +291,28 @@ export default function WhatsAppHome() {
     const currentInput = input;
     handleInputChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>);
 
-    // If already generating a response, stop it before sending new message
+    // If already generating a response, stop it and clear any partial messages
     if (isGeneratingResponse) {
       stop();  // Stop the current response generation
       setIsGeneratingResponse(false);
       setShouldRegenerate(false);
-    }
-
-    // Reset termination state if previously terminated
-    if (isTerminated) {
-      setIsTerminated(false);
-    }
-
-    // Check for termination command
-    if (currentInput.toLowerCase() === CHAT_CONSTANTS.TERMINATE_COMMAND) {
-      setIsTerminated(true);
+      
+      // Remove any partial assistant messages from both UI and AI state
+      const lastUserMessageIndex = aiMessages.findLastIndex(m => m.role === 'user');
+      const cleanedAiMessages = aiMessages.slice(0, lastUserMessageIndex + 1);
+      
+      // Update UI messages
       setActiveChats(prev => {
         const updatedChats = prev.map(chat => 
           chat.id === selectedChat.id 
-            ? { ...chat, chainLength: 0, chainId: undefined, messages: [] }
+            ? {
+                ...chat,
+                messages: chat.messages.filter((m, i) => {
+                  // Keep all messages up to and including the last user message
+                  const lastUserIndex = chat.messages.findLastIndex(msg => msg.role === 'user');
+                  return i <= lastUserIndex;
+                })
+              }
             : chat
         );
         
@@ -227,14 +324,18 @@ export default function WhatsAppHome() {
         
         return updatedChats;
       });
-      return;
     }
 
-    // For individual chats, silently add @mention if not present
-    let messageContent = currentInput;
-    let displayContent = currentInput;
-    if (selectedChat.type === 'individual' && !currentInput.includes('@')) {
-      messageContent = `@${selectedChat.id} ${currentInput}`;
+    // Reset termination state if previously terminated
+    if (isTerminated) {
+      setIsTerminated(false);
+    }
+
+    // Check for termination command
+    if (currentInput.toLowerCase() === CHAT_CONSTANTS.TERMINATE_COMMAND) {
+      setIsTerminated(true);
+      await clearTerminatedChat(selectedChat.id);
+      return;
     }
 
     // Start new chain for user message
@@ -255,11 +356,11 @@ export default function WhatsAppHome() {
       return updatedChats;
     });
 
-    // Add user message to chat
+    // Create the message object
     const userMessage: GroupMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: displayContent,
+      content: currentInput,
       characterId: selectedChat.type === 'individual' ? selectedChat.id : undefined,
       showId: selectedChat.type === 'group' ? selectedChat.id : undefined,
       timestamp: new Date(Date.now())
@@ -271,7 +372,7 @@ export default function WhatsAppHome() {
         chat.id === selectedChat.id 
           ? {
               ...chat,
-              lastMessage: displayContent,
+              lastMessage: currentInput,
               timestamp: new Date(),
               messages: [...chat.messages, userMessage]
             }
@@ -288,13 +389,13 @@ export default function WhatsAppHome() {
     });
 
     try {
-      // Send to API with modified content
+      // Send to API - using the same message object for consistency
       setIsGeneratingResponse(true);
       await append({
-        id: Date.now().toString(),
+        id: userMessage.id,
         role: 'user',
-        content: messageContent,
-        createdAt: new Date()
+        content: userMessage.content,
+        createdAt: userMessage.timestamp
       });
     } catch (error) {
       console.error('Error sending message:', error);
@@ -383,7 +484,12 @@ export default function WhatsAppHome() {
                 <path fill="currentColor" d="M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM6 8a6 6 0 1 1 12 0A6 6 0 0 1 6 8zm2 10a3 3 0 0 0-3 3 1 1 0 1 1-2 0 5 5 0 0 1 5-5h8a5 5 0 0 1 5 5 1 1 0 1 1-2 0 3 3 0 0 0-3-3H8z"/>
               </svg>
             </div>
-            <h1 className="text-xl font-semibold text-[#111b21]">WhatsApp</h1>
+            <div>
+              <h1 className="text-xl font-semibold text-[#111b21]">WhatsApp</h1>
+              {isSaving && (
+                <span className="text-xs text-[#667781]">Saving...</span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -392,9 +498,31 @@ export default function WhatsAppHome() {
             >
               <Plus className="w-5 h-5 text-[#54656f]" />
             </button>
-            <button className="p-2 hover:bg-black/5 rounded-full transition-colors">
-              <MoreVertical className="w-5 h-5 text-[#54656f]" />
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                className="p-2 hover:bg-black/5 rounded-full transition-colors"
+              >
+                <MoreVertical className="w-5 h-5 text-[#54656f]" />
+              </button>
+              
+              {/* Menu Dropdown */}
+              {showMenu && (
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  <button
+                    onClick={async () => {
+                      if (window.confirm('Are you sure you want to clear all chats? This cannot be undone.')) {
+                        await clearAllChats();
+                        setShowMenu(false);
+                      }
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-50"
+                  >
+                    Clear All Chats
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

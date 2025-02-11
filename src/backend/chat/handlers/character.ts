@@ -7,22 +7,12 @@ import { CHAT_CONSTANTS } from '../types';
 
 export class CharacterChatHandler implements ChatHandler {
   canHandle(context: HandlerContext): boolean {
-    const { messages } = context;
-    const lastMessage = messages[messages.length - 1];
-    
-    // Check for termination command
-    if (lastMessage.content.toLowerCase() === CHAT_CONSTANTS.TERMINATE_COMMAND) {
+    // Check if we have a character in context or if it's a termination command
+    if (this.shouldTerminate(context)) {
       return true;
     }
     
-    // Check if the message mentions a character (in both user and assistant messages)
-    const mentionMatch = lastMessage.content.match(/@([\w-]+)/);
-    if (mentionMatch) {
-      const characterId = mentionMatch[1];
-      return this.findCharacter(characterId) !== null;
-    }
-    
-    return false;
+    return !!context.character && this.findCharacter(context.character) !== null;
   }
 
   private shouldTerminate(context: HandlerContext): boolean {
@@ -141,23 +131,20 @@ export class CharacterChatHandler implements ChatHandler {
       });
     }
 
-    const { messages, chainLength = 0 } = context;
-    const lastMessage = messages[messages.length - 1];
-    const mentionMatch = lastMessage.content.match(/@([\w-]+)/);
+    const { messages, chainLength = 0, character } = context;
     
-    if (!mentionMatch) {
+    if (!character) {
       return new Response(JSON.stringify({
-        content: "No character mentioned.",
+        content: "No character specified.",
         timestamp: Date.now()
       }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    const characterId = mentionMatch[1];
-    const character = this.findCharacter(characterId);
+    const characterConfig = this.findCharacter(character);
     
-    if (!character) {
+    if (!characterConfig) {
       return new Response(JSON.stringify({
         content: "Character not found.",
         timestamp: Date.now()
@@ -169,7 +156,7 @@ export class CharacterChatHandler implements ChatHandler {
     // Check chain length after character identification
     if (chainLength >= CHAT_CONSTANTS.MAX_CHAIN_LENGTH) {
       return new Response(JSON.stringify({
-        content: `[${character.name}] I need to pause for a moment. Let's continue our conversation after a brief break.`,
+        content: `[${characterConfig.name}] I need to pause for a moment. Let's continue our conversation after a brief break.`,
         timestamp: Date.now()
       }), {
         headers: { 'Content-Type': 'application/json' }
@@ -177,7 +164,7 @@ export class CharacterChatHandler implements ChatHandler {
     }
 
     const recentCharacters = this.getRecentCharacters(messages);
-    const processedMessages = this.processMessages(messages, character);
+    const processedMessages = this.processMessages(messages, characterConfig);
     
     // Add consistent delay for better UX
     await new Promise(resolve => 
@@ -185,19 +172,19 @@ export class CharacterChatHandler implements ChatHandler {
     );
 
     const result = streamText({
-      model: getAIClient(character.baseModel as any),
+      model: getAIClient(characterConfig.baseModel as any),
       messages: [
         { 
           role: 'system', 
-          content: `${character.prompt}\n\nCRITICAL INSTRUCTIONS - YOU MUST FOLLOW THESE EXACTLY:
+          content: `${characterConfig.prompt}\n\nCRITICAL INSTRUCTIONS - YOU MUST FOLLOW THESE EXACTLY:
 
-1. You are ${character.name}. You must ALWAYS stay in character.
-2. You MUST start EVERY response with [${character.name}]
+1. You are ${characterConfig.name}. You must ALWAYS stay in character.
+2. You MUST start EVERY response with [${characterConfig.name}]
 3. When mentioning other characters, you MUST use their @mention:
 ${recentCharacters.map(char => `   - Use @${char.id} when referring to ${char.name}`).join('\n')}
 
 RESPONSE FORMAT:
-[${character.name}] Your message here...
+[${characterConfig.name}] Your message here...
 
 RULES:
 - Never break character
@@ -214,8 +201,8 @@ RULES:
         {
           role: 'system',
           content: `FINAL REMINDER:
-- You are [${character.name}]
-- Start your response with [${character.name}]
+- You are [${characterConfig.name}]
+- Start your response with [${characterConfig.name}]
 - Stay in character
 - Use @mentions for: ${recentCharacters.map(char => `@${char.id}`).join(' ')}
 - Never respond as "Assistant"`

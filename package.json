@@ -20,6 +20,7 @@
     "ai": "^4.1.28",
     "astro": "^5.2.5",
     "framer-motion": "^12.4.1",
+    "localforage": "^1.10.0",
     "lucide-react": "^0.475.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

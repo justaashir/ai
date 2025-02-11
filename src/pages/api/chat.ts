@@ -20,6 +20,7 @@ export const POST: APIRoute = async ({ request }) => {
     const { messages, lastResponseTime } = await request.json() as ChatRequest;
     const url = new URL(request.url);
     const model = url.searchParams.get('model') || 'gpt-4o-mini';
+    const character = url.searchParams.get('character');
 
     // Check for termination command
     const lastMessage = messages[messages.length - 1];
@@ -29,6 +30,7 @@ export const POST: APIRoute = async ({ request }) => {
       request,
       messages,
       model,
+      character,
       terminate: isTerminate,
       lastResponseTime,
       chainLength: messages.filter(m => m.chainId === messages[messages.length - 1].chainId).length
