@@ -1,6 +1,6 @@
 import { streamText } from 'ai';
 import type { ChatHandler, HandlerContext } from '../types';
-import { LOGO_SYSTEM_PROMPT, LOGO_ITERATION_PROMPT } from '../prompts/svg-logo';
+import { LOGO_SYSTEM_PROMPT } from '../prompts/svg-logo';
 import { getAIClient } from '../../ai/config';
 
 export class SVGLogoHandler implements ChatHandler {
@@ -56,7 +56,7 @@ export class SVGLogoHandler implements ChatHandler {
       messages: [
         { 
           role: 'system', 
-          content: isIteration ? LOGO_ITERATION_PROMPT : LOGO_SYSTEM_PROMPT 
+          content: LOGO_SYSTEM_PROMPT 
         },
         ...processedMessages
       ],

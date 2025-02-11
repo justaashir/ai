@@ -46,8 +46,18 @@ export class CharacterChatHandler implements ChatHandler {
     return null;
   }
 
-  private getRecentCharacters(messages: HandlerContext['messages']): Character[] {
+  private getRecentCharacters(messages: HandlerContext['messages'], showId?: string): Character[] {
     const characters: Character[] = [];
+    
+    // If showId is provided, get all characters from that show first
+    if (showId) {
+      const show = Object.values(shows).find(s => s.id === showId);
+      if (show) {
+        characters.push(...show.characters);
+      }
+    }
+    
+    // Then add any characters mentioned in messages
     for (const msg of messages) {
       // Check for character name in brackets
       const nameMatch = msg.content.match(/^\[([\w\s-]+)\]/);
@@ -70,54 +80,6 @@ export class CharacterChatHandler implements ChatHandler {
     return characters;
   }
 
-  private processMessages(messages: HandlerContext['messages'], currentCharacter: Character): { role: 'system' | 'user' | 'assistant'; content: string; }[] {
-    const processedMessages: { role: 'system' | 'user' | 'assistant'; content: string; }[] = [];
-    const recentCharacters = this.getRecentCharacters(messages);
-    
-    // Find the last few relevant messages for context
-    const relevantMessages = messages.slice(-10); // Keep last 10 messages for context
-    
-    for (const msg of relevantMessages) {
-      let content = msg.content;
-      let role = msg.role as 'system' | 'user' | 'assistant';
-      
-      // Extract character name if present
-      const nameMatch = content.match(/^\[([\w\s-]+)\]/);
-      const characterName = nameMatch ? nameMatch[1] : null;
-      const character = characterName ? this.findCharacterByName(characterName) : null;
-      
-      // Remove the character name prefix if present
-      if (nameMatch) {
-        content = content.replace(/^\[[\w\s-]+\]\s*/, '');
-      }
-      
-      // Process the content to ensure proper @ mentions
-      if (character || role === 'user') {
-        // Replace character names with @ mentions
-        for (const otherChar of recentCharacters) {
-          const nameRegex = new RegExp(`\\b${otherChar.name}\\b`, 'gi');
-          content = content.replace(nameRegex, `@${otherChar.id}`);
-        }
-      }
-      
-      // For user messages mentioning a character, format properly
-      if (role === 'user') {
-        const mentionMatch = content.match(/@([\w-]+)/);
-        if (mentionMatch) {
-          const mentionedChar = this.findCharacter(mentionMatch[1]);
-          if (mentionedChar) {
-            // Keep the @mention in the message for better context
-            content = content.trim();
-          }
-        }
-      }
-      
-      processedMessages.push({ role, content });
-    }
-    
-    return processedMessages;
-  }
-
   async handle(context: HandlerContext): Promise<Response> {
     // Check for termination
     if (this.shouldTerminate(context)) {
@@ -131,7 +93,7 @@ export class CharacterChatHandler implements ChatHandler {
       });
     }
 
-    const { messages, chainLength = 0, character } = context;
+    const { messages, chainLength = 0, character, showId } = context;
     
     if (!character) {
       return new Response(JSON.stringify({
@@ -163,13 +125,25 @@ export class CharacterChatHandler implements ChatHandler {
       });
     }
 
-    const recentCharacters = this.getRecentCharacters(messages);
-    const processedMessages = this.processMessages(messages, characterConfig);
+    // Get recent messages and characters involved in the conversation
+    const recentCharacters = this.getRecentCharacters(messages, showId);
     
     // Add consistent delay for better UX
     await new Promise(resolve => 
       setTimeout(resolve, CHAT_CONSTANTS.MIN_ASSISTANT_DELAY_MS)
     );
+
+    // Get the last few messages for context
+    const lastMessages = messages.slice(-5); // Get last 5 messages for immediate context
+    const mentionedCharacters = new Set<string>();
+    
+    // Extract all mentioned characters from recent messages
+    lastMessages.forEach(msg => {
+      const mentions = Array.from(msg.content.matchAll(/@([\w-]+)/g));
+      mentions.forEach(mention => {
+        mentionedCharacters.add(mention[1]);
+      });
+    });
 
     const result = streamText({
       model: getAIClient(characterConfig.baseModel as any),
@@ -183,6 +157,11 @@ export class CharacterChatHandler implements ChatHandler {
 3. When mentioning other characters, you MUST use their @mention:
 ${recentCharacters.map(char => `   - Use @${char.id} when referring to ${char.name}`).join('\n')}
 
+CONVERSATION CONTEXT:
+- You are responding to the most recent message
+- Only reference characters who were actually mentioned or involved in the recent conversation
+- Stay focused on the current topic and context of the conversation
+
 RESPONSE FORMAT:
 [${characterConfig.name}] Your message here...
 
@@ -190,21 +169,20 @@ RULES:
 - Never break character
 - Never respond as "Assistant"
 - Always include your name in brackets at the start
-- Always use @mentions for other characters
+- Use @mentions only for characters actually involved in the conversation
 - Keep responses natural and conversational
-- Reference what others have said when appropriate
+- Reference what others have actually said in the conversation
 - Keep responses concise
-- Continue conversations naturally`
+- Stay relevant to the current context`
         },
-        ...processedMessages,
-        // Add an explicit prompt to respond
+        ...messages,
         {
           role: 'system',
           content: `FINAL REMINDER:
 - You are [${characterConfig.name}]
 - Start your response with [${characterConfig.name}]
 - Stay in character
-- Use @mentions for: ${recentCharacters.map(char => `@${char.id}`).join(' ')}
+- Only mention characters who are actually part of this conversation
 - Never respond as "Assistant"`
         }
       ],
