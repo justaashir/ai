@@ -27,9 +27,12 @@ export interface Group {
 }
 
 export interface GroupMessage extends Message {
+  id: string;
   characterId?: string;
   showId?: string;
   timestamp?: Date;
+  chainId?: string;
+  chainLength?: number;
 }
 
 export interface SVGPreviewProps {

@@ -55,36 +55,25 @@ export const VisualInput: React.FC<VisualInputProps> = ({
         )}
       </AnimatePresence>
 
-      <form onSubmit={onSubmit} className="flex items-center gap-2">
-        <div className="flex-1 relative">
+      <form onSubmit={onSubmit} className="flex items-end gap-2">
+        <div className="flex-1 bg-white rounded-lg shadow-sm">
           <input
             type="text"
             value={value}
             onChange={onChange}
             placeholder="Type a message"
-            disabled={isLoading}
-            className="w-full py-2.5 px-4 bg-white rounded-lg focus:outline-none shadow-sm 
-              placeholder:text-gray-500 text-base md:text-[15px] disabled:bg-gray-50"
+            className="w-full px-4 py-2.5 text-sm text-[#111b21] placeholder-[#667781] focus:outline-none rounded-lg"
           />
         </div>
-
-        <motion.button
+        <button
           type="submit"
-          disabled={isLoading}
-          className={`w-11 h-11 flex items-center justify-center text-white rounded-full shadow-sm
-            ${isLoading 
-              ? 'bg-[#8696a0]/20 cursor-not-allowed' 
-              : 'bg-[#00a884] hover:bg-[#00916e] transition-colors'
-            }`}
-          whileHover={isLoading ? {} : { scale: 1.05 }}
-          whileTap={isLoading ? {} : { scale: 0.95 }}
+          className={`p-2 rounded-full transition-colors ${
+            value.trim() ? 'bg-[#00a884] text-white hover:bg-[#00a884]/90' : 'bg-[#8696a0] text-white/50'
+          }`}
+          disabled={!value.trim()}
         >
-          <Send 
-            className="w-5 h-5" 
-            strokeWidth={2.5}
-            color={isLoading ? "#8696a0" : "currentColor"}
-          />
-        </motion.button>
+          <Send className="w-5 h-5" />
+        </button>
       </form>
     </div>
   );

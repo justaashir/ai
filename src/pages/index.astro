@@ -1,41 +1,15 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import WhatsAppHome from '../components/WhatsAppHome';
 
 // Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
 // Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
 
 export const prerender = false;
 
-if (Astro.request.method === 'GET') {
-	return Astro.redirect('/chat');
-}
+
 ---
 
-<Layout>
-	<main class="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-b from-purple-50 to-white">
-		<div class="max-w-2xl w-full text-center space-y-8">
-			<h1 class="text-5xl font-bold text-gray-900">
-				AI Logo Generator
-			</h1>
-			<p class="text-xl text-gray-600">
-				Create beautiful, unique logos powered by AI. Customize and iterate until you find the perfect design for your brand.
-			</p>
-			<div class="space-y-4">
-				<a 
-					href="/chat" 
-					class="inline-flex items-center px-6 py-3 text-lg font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
-				>
-					Start Generating
-					<svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-					</svg>
-				</a>
-			</div>
-			<div class="pt-8">
-				<p class="text-sm text-gray-500">
-					Powered by GPT-4 and Claude 3 • Create logos in seconds
-				</p>
-			</div>
-		</div>
-	</main>
+<Layout title="WhatsApp Style Chat">
+	<WhatsAppHome client:load />
 </Layout>

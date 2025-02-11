@@ -1,24 +1,36 @@
 import { streamText } from 'ai';
-import type { ChatHandler, HandlerContext } from '../types';
+import type { ChatHandler, HandlerContext, ChatResponse } from '../types';
 import { getAIClient } from '../../ai/config';
 import { shows } from '../../../config/shows';
 import type { Character } from '../../../types';
+import { CHAT_CONSTANTS } from '../types';
 
 export class CharacterChatHandler implements ChatHandler {
   canHandle(context: HandlerContext): boolean {
     const { messages } = context;
     const lastMessage = messages[messages.length - 1];
     
-    // Check if the last message mentions a character
-    if (lastMessage?.role === 'user') {
-      const mentionMatch = lastMessage.content.match(/@([\w-]+)/);
-      if (mentionMatch) {
-        const characterId = mentionMatch[1];
-        return this.findCharacter(characterId) !== null;
-      }
+    // Check for termination command
+    if (lastMessage.content.toLowerCase() === CHAT_CONSTANTS.TERMINATE_COMMAND) {
+      return true;
+    }
+    
+    // Check if the message mentions a character (in both user and assistant messages)
+    const mentionMatch = lastMessage.content.match(/@([\w-]+)/);
+    if (mentionMatch) {
+      const characterId = mentionMatch[1];
+      return this.findCharacter(characterId) !== null;
     }
     
     return false;
+  }
+
+  private shouldTerminate(context: HandlerContext): boolean {
+    const { messages, terminate } = context;
+    if (terminate) return true;
+    
+    const lastMessage = messages[messages.length - 1];
+    return lastMessage.content.toLowerCase() === CHAT_CONSTANTS.TERMINATE_COMMAND;
   }
 
   private findCharacter(characterId: string): Character | null {
@@ -31,24 +43,183 @@ export class CharacterChatHandler implements ChatHandler {
     return null;
   }
 
+  private findCharacterByName(name: string): Character | null {
+    for (const show of Object.values(shows)) {
+      const character = show.characters.find(char => 
+        char.name.toLowerCase() === name.toLowerCase() ||
+        char.name.toLowerCase().includes(name.toLowerCase())
+      );
+      if (character) {
+        return character;
+      }
+    }
+    return null;
+  }
+
+  private getRecentCharacters(messages: HandlerContext['messages']): Character[] {
+    const characters: Character[] = [];
+    for (const msg of messages) {
+      // Check for character name in brackets
+      const nameMatch = msg.content.match(/^\[([\w\s-]+)\]/);
+      if (nameMatch) {
+        const character = this.findCharacterByName(nameMatch[1]);
+        if (character && !characters.find(c => c.id === character.id)) {
+          characters.push(character);
+        }
+      }
+      
+      // Check for @ mentions
+      const mentions = Array.from(msg.content.matchAll(/@([\w-]+)/g));
+      for (const mention of mentions) {
+        const character = this.findCharacter(mention[1]);
+        if (character && !characters.find(c => c.id === character.id)) {
+          characters.push(character);
+        }
+      }
+    }
+    return characters;
+  }
+
+  private processMessages(messages: HandlerContext['messages'], currentCharacter: Character): { role: 'system' | 'user' | 'assistant'; content: string; }[] {
+    const processedMessages: { role: 'system' | 'user' | 'assistant'; content: string; }[] = [];
+    const recentCharacters = this.getRecentCharacters(messages);
+    
+    // Find the last few relevant messages for context
+    const relevantMessages = messages.slice(-10); // Keep last 10 messages for context
+    
+    for (const msg of relevantMessages) {
+      let content = msg.content;
+      let role = msg.role as 'system' | 'user' | 'assistant';
+      
+      // Extract character name if present
+      const nameMatch = content.match(/^\[([\w\s-]+)\]/);
+      const characterName = nameMatch ? nameMatch[1] : null;
+      const character = characterName ? this.findCharacterByName(characterName) : null;
+      
+      // Remove the character name prefix if present
+      if (nameMatch) {
+        content = content.replace(/^\[[\w\s-]+\]\s*/, '');
+      }
+      
+      // Process the content to ensure proper @ mentions
+      if (character || role === 'user') {
+        // Replace character names with @ mentions
+        for (const otherChar of recentCharacters) {
+          const nameRegex = new RegExp(`\\b${otherChar.name}\\b`, 'gi');
+          content = content.replace(nameRegex, `@${otherChar.id}`);
+        }
+      }
+      
+      // For user messages mentioning a character, format properly
+      if (role === 'user') {
+        const mentionMatch = content.match(/@([\w-]+)/);
+        if (mentionMatch) {
+          const mentionedChar = this.findCharacter(mentionMatch[1]);
+          if (mentionedChar) {
+            // Keep the @mention in the message for better context
+            content = content.trim();
+          }
+        }
+      }
+      
+      processedMessages.push({ role, content });
+    }
+    
+    return processedMessages;
+  }
+
   async handle(context: HandlerContext): Promise<Response> {
-    const { messages } = context;
+    // Check for termination
+    if (this.shouldTerminate(context)) {
+      const response: ChatResponse = {
+        content: "Chat terminated. Starting fresh conversation.",
+        terminated: true,
+        timestamp: Date.now()
+      };
+      return new Response(JSON.stringify(response), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const { messages, chainLength = 0 } = context;
     const lastMessage = messages[messages.length - 1];
     const mentionMatch = lastMessage.content.match(/@([\w-]+)/);
-    const characterId = mentionMatch![1];
-    const character = this.findCharacter(characterId)!;
+    
+    if (!mentionMatch) {
+      return new Response(JSON.stringify({
+        content: "No character mentioned.",
+        timestamp: Date.now()
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const characterId = mentionMatch[1];
+    const character = this.findCharacter(characterId);
+    
+    if (!character) {
+      return new Response(JSON.stringify({
+        content: "Character not found.",
+        timestamp: Date.now()
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Check chain length after character identification
+    if (chainLength >= CHAT_CONSTANTS.MAX_CHAIN_LENGTH) {
+      return new Response(JSON.stringify({
+        content: `[${character.name}] I need to pause for a moment. Let's continue our conversation after a brief break.`,
+        timestamp: Date.now()
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const recentCharacters = this.getRecentCharacters(messages);
+    const processedMessages = this.processMessages(messages, character);
+    
+    // Add consistent delay for better UX
+    await new Promise(resolve => 
+      setTimeout(resolve, CHAT_CONSTANTS.MIN_ASSISTANT_DELAY_MS)
+    );
 
     const result = streamText({
-      model: getAIClient(character.baseModel as any), // TODO: Fix type
+      model: getAIClient(character.baseModel as any),
       messages: [
         { 
           role: 'system', 
-          content: `${character.prompt}\n\nIMPORTANT: Always start your response with [${character.name}] followed by your message.`
+          content: `${character.prompt}\n\nCRITICAL INSTRUCTIONS - YOU MUST FOLLOW THESE EXACTLY:
+
+1. You are ${character.name}. You must ALWAYS stay in character.
+2. You MUST start EVERY response with [${character.name}]
+3. When mentioning other characters, you MUST use their @mention:
+${recentCharacters.map(char => `   - Use @${char.id} when referring to ${char.name}`).join('\n')}
+
+RESPONSE FORMAT:
+[${character.name}] Your message here...
+
+RULES:
+- Never break character
+- Never respond as "Assistant"
+- Always include your name in brackets at the start
+- Always use @mentions for other characters
+- Keep responses natural and conversational
+- Reference what others have said when appropriate
+- Keep responses concise
+- Continue conversations naturally`
         },
-        ...messages.map(msg => ({
-          ...msg,
-          content: msg.content.replace(/@[\w-]+/g, '').trim() // Remove character mentions
-        }))
+        ...processedMessages,
+        // Add an explicit prompt to respond
+        {
+          role: 'system',
+          content: `FINAL REMINDER:
+- You are [${character.name}]
+- Start your response with [${character.name}]
+- Stay in character
+- Use @mentions for: ${recentCharacters.map(char => `@${char.id}`).join(' ')}
+- Never respond as "Assistant"`
+        }
       ],
       temperature: 0.7,
       onError: (error) => {

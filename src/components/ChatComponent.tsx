@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Copy, Check, Users, ArrowLeft } from 'lucide-react';
 import { CreateGroupModal } from './CreateGroupModal';
 import { shows, getAllCharacters, getCharacterById, getShowById } from '../config';
+import { CHAT_CONSTANTS } from '../backend/chat/types';
 
 const AVAILABLE_MODELS: { id: ModelType; name: string }[] = [
   { id: 'gpt-4o-mini', name: 'GPT-4 Optimized Mini' },
@@ -36,6 +37,10 @@ export default function ChatComponent() {
   const [characterSuggestions, setCharacterSuggestions] = useState<ReturnType<typeof getAllCharacters>>([]);
   const [cursorPosition, setCursorPosition] = useState<number>(0);
   const [localMessages, setLocalMessages] = useState<GroupMessage[]>([]);
+  const [isTerminated, setIsTerminated] = useState(false);
+  const [lastResponseTime, setLastResponseTime] = useState<number | null>(null);
+  const [chainLength, setChainLength] = useState(0);
+  const [chainId, setChainId] = useState<string | null>(null);
 
   const currentShow = activeShow ? getShowById(activeShow) : null;
   const currentCharacter = mentionedCharacter ? getCharacterById(mentionedCharacter) : null;
@@ -46,8 +51,19 @@ export default function ChatComponent() {
       setContextMessage(null);
       setIsGeneratingLogos(false);
       setIsStreamingOptions(false);
+      setLastResponseTime(Date.now());
     },
-    onFinish: (message) => {
+    onFinish: async (message) => {
+      // Check for termination
+      if (message.content.includes("Chat terminated")) {
+        setIsTerminated(true);
+        setChainLength(0);
+        setChainId(null);
+        setLastResponseTime(null);
+        setLocalMessages([]);
+        return;
+      }
+
       // Extract character name from response format [Character Name] Message
       const characterMatch = message.content.match(/^\[([\w\s-]+)\]/);
       const characterName = characterMatch ? characterMatch[1].trim() : null;
@@ -61,9 +77,42 @@ export default function ChatComponent() {
         content: cleanContent,
         characterId: character?.id || null,
         showId: activeShow,
-        timestamp: new Date()
+        timestamp: Date.now(),
+        chainId
       } as GroupMessage;
       setLocalMessages(prev => [...prev, messageWithCharacter]);
+
+      // Check for @ mentions in the assistant's response
+      const mentions = Array.from(cleanContent.matchAll(/@([\w-]+)/g));
+      if (mentions.length > 0 && chainLength < CHAT_CONSTANTS.MAX_CHAIN_LENGTH) {
+        // Get the last mentioned character
+        const lastMention = mentions[mentions.length - 1][1];
+        const mentionedCharacter = getCharacterById(lastMention);
+        
+        if (mentionedCharacter) {
+          // Increment chain length
+          const newChainLength = chainLength + 1;
+          setChainLength(newChainLength);
+          
+          if (newChainLength < CHAT_CONSTANTS.MAX_CHAIN_LENGTH) {
+            // Add a delay before the next response
+            await new Promise(resolve => setTimeout(resolve, CHAT_CONSTANTS.MIN_ASSISTANT_DELAY_MS));
+            
+            // Trigger a new message from the mentioned character
+            const userMessage = {
+              role: 'user',
+              content: `@${lastMention} ${cleanContent}`,
+              timestamp: Date.now(),
+              chainId: chainId || Date.now().toString()
+            };
+            await append(userMessage);
+          }
+        }
+      } else {
+        // Reset chain when no mentions
+        setChainLength(0);
+        setChainId(null);
+      }
     }
   });
 
@@ -71,13 +120,33 @@ export default function ChatComponent() {
     e.preventDefault();
     if (!input.trim()) return;
 
+    // Reset termination state if previously terminated
+    if (isTerminated) {
+      setIsTerminated(false);
+    }
+
+    // Check for termination command
+    if (input.toLowerCase() === CHAT_CONSTANTS.TERMINATE_COMMAND) {
+      setIsTerminated(true);
+      setChainLength(0);
+      setChainId(null);
+      setLastResponseTime(null);
+      setLocalMessages([]);
+    }
+
+    // Start new chain for user message
+    const newChainId = Date.now().toString();
+    setChainId(newChainId);
+    setChainLength(0);
+
     // Add user message to local messages first
     const userMessage: GroupMessage = {
       role: 'user',
       content: input,
       characterId: mentionedCharacter,
       showId: activeShow,
-      timestamp: new Date()
+      timestamp: Date.now(),
+      chainId: newChainId
     };
     setLocalMessages(prev => [...prev, userMessage]);
     
@@ -272,9 +341,21 @@ export default function ChatComponent() {
                 )}
                 <div>
                   <h2 className="font-semibold text-[#111b21]">{currentShow.name}</h2>
-                  <div className="text-xs text-gray-500">
-                    Use @ to mention a character
-                  </div>
+                  {isLoading ? (
+                    <div className="text-xs text-[#667781]">
+                      {(() => {
+                        const lastMessage = localMessages[localMessages.length - 1];
+                        const mentionMatch = lastMessage?.content.match(/@([\w-]+)/);
+                        const loadingCharacterId = mentionMatch ? mentionMatch[1] : null;
+                        const loadingCharacter = loadingCharacterId ? getCharacterById(loadingCharacterId) : null;
+                        return loadingCharacter ? `${loadingCharacter.name} is typing...` : '';
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-500">
+                      Use @ to mention a character
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -470,30 +551,6 @@ export default function ChatComponent() {
               })}
             </AnimatePresence>
           )}
-
-          <AnimatePresence>
-            {/* Loading dots for both regular messages and logo generation */}
-            {isLoading && !localMessages.some(m => m.role === 'assistant' && m.content) && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex justify-start"
-              >
-                <div className="bg-white px-3 py-2 rounded-lg shadow-sm relative">
-                  <div className="flex items-center gap-1 h-5">
-                    <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse" />
-                    <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse delay-75" />
-                    <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse delay-150" />
-                  </div>
-                  {/* Message tail */}
-                  <div className="absolute top-0 -left-1.5">
-                    <div className="w-4 h-4 transform rotate-45 bg-white translate-x-1/2" />
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
         
         {/* Input area */}
@@ -538,6 +595,13 @@ export default function ChatComponent() {
           </div>
         </div>
       </div>
+
+      {/* Add terminated state indicator */}
+      {isTerminated && (
+        <div className="absolute top-4 right-4 bg-red-500 text-white px-3 py-1 rounded-full text-sm">
+          Chat Terminated
+        </div>
+      )}
     </div>
   );
 } 
