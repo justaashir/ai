@@ -30,6 +30,7 @@ interface Chat {
   messages: GroupMessage[];
   chainId?: string;
   chainLength: number;
+  lastSpeakingCharacter?: string;
 }
 
 // Add this helper function at the top level
@@ -65,6 +66,9 @@ export default function WhatsAppHome() {
   // Add state for mobile navigation
   const [showChatList, setShowChatList] = useState(true);
 
+  // Add new state for last speaking character
+  const [lastSpeakingCharacter, setLastSpeakingCharacter] = useState<string | null>(null);
+
   // Load chats from storage on component mount
   useEffect(() => {
     const loadChats = async () => {
@@ -88,6 +92,10 @@ export default function WhatsAppHome() {
             const lastSelectedChat = processedChats.find(chat => chat.id === lastSelectedChatId);
             if (lastSelectedChat) {
               setSelectedChat(lastSelectedChat);
+              // Restore last speaking character if exists
+              if (lastSelectedChat.lastSpeakingCharacter) {
+                setLastSpeakingCharacter(lastSelectedChat.lastSpeakingCharacter);
+              }
             }
           }
         }
@@ -165,12 +173,14 @@ export default function WhatsAppHome() {
               const character = getCharacterById(lastMention);
               if (character) {
                 setLastMessageSender(character.name);
+                setLastSpeakingCharacter(character.id);
               }
             } else {
               // If no mentions found in the message, use the character from the message
               const mentionedCharacter = lastMessage.characterId ? getCharacterById(lastMessage.characterId) : undefined;
               if (mentionedCharacter) {
                 setLastMessageSender(mentionedCharacter.name);
+                setLastSpeakingCharacter(mentionedCharacter.id);
               }
             }
           }
@@ -197,6 +207,17 @@ export default function WhatsAppHome() {
       const cleanContent = characterMatch 
         ? message.content.replace(/^\[[\w\s-]+\]\s*/, '')
         : message.content;
+
+      // Update last speaking character
+      if (character?.id) {
+        setLastSpeakingCharacter(character.id);
+        // Update the chat's lastSpeakingCharacter
+        setActiveChats(prev => prev.map(chat => 
+          chat.id === selectedChat.id 
+            ? { ...chat, lastSpeakingCharacter: character.id }
+            : chat
+        ));
+      }
 
       const messageWithCharacter: GroupMessage = {
         id: Date.now().toString(),
@@ -279,12 +300,56 @@ export default function WhatsAppHome() {
     const currentInput = input;
     handleInputChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>);
 
+    let messageContent = currentInput;
+    let targetCharacterId = undefined;
+
+    if (selectedChat.type === 'individual') {
+      const character = getCharacterById(selectedChat.id);
+      messageContent = `[${character?.name}] ${currentInput}`;
+      targetCharacterId = selectedChat.id;
+    } else if (selectedChat.type === 'group') {
+      // For group chats, check for @ mentions
+      const mentionMatch = currentInput.match(/@([\w-]+)/);
+      
+      if (mentionMatch) {
+        // Use explicitly mentioned character
+        const mentionedCharacter = getCharacterById(mentionMatch[1]);
+        if (mentionedCharacter) {
+          setLastMessageSender(mentionedCharacter.name);
+          targetCharacterId = mentionedCharacter.id;
+        }
+      } else if (lastSpeakingCharacter || selectedChat.lastSpeakingCharacter) {
+        // If no mention but we have a last speaking character, use them without showing the @
+        const character = getCharacterById(lastSpeakingCharacter || selectedChat.lastSpeakingCharacter);
+        if (character) {
+          // Don't add the @ mention to the visible message
+          messageContent = currentInput;
+          setLastMessageSender(character.name);
+          targetCharacterId = character.id;
+        }
+      } else if (selectedChat.messages.filter(m => m.role === 'user').length === 0) {
+        // If this is the first message, use the first character without showing the @
+        if (selectedChat.members && selectedChat.members.length > 0) {
+          const firstCharacter = selectedChat.members[0];
+          messageContent = currentInput;
+          setLastMessageSender(firstCharacter.name);
+          targetCharacterId = firstCharacter.id;
+        }
+      }
+
+      // Don't send if no target character was found
+      if (!targetCharacterId) {
+        setIsGeneratingResponse(false);
+        return;
+      }
+    }
+
     // Create the message object
     const userMessage: GroupMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: currentInput,
-      characterId: selectedChat.type === 'individual' ? selectedChat.id : undefined,
+      content: messageContent,
+      characterId: targetCharacterId,
       showId: selectedChat.type === 'group' ? selectedChat.id : undefined,
       timestamp: new Date()
     };
@@ -297,7 +362,8 @@ export default function WhatsAppHome() {
               ...chat,
               lastMessage: currentInput,
               timestamp: new Date(),
-              messages: [...chat.messages, userMessage]
+              messages: [...chat.messages, userMessage],
+              lastSpeakingCharacter: targetCharacterId || chat.lastSpeakingCharacter
             }
           : chat
       );
@@ -313,28 +379,15 @@ export default function WhatsAppHome() {
     try {
       setIsGeneratingResponse(true);
       
-      let messageContent = currentInput;
-      if (selectedChat.type === 'individual') {
-        const character = getCharacterById(selectedChat.id);
-        messageContent = `[${character?.name}] ${currentInput}`;
-      } else if (selectedChat.type === 'group') {
-        // For group chats, only send if there's an @ mention
-        const mentionMatch = currentInput.match(/@([\w-]+)/);
-        if (!mentionMatch) {
-          setIsGeneratingResponse(false);
-          return; // Don't send if no mention in group chat
-        }
-        // Set the typing indicator for the mentioned character
-        const mentionedCharacter = getCharacterById(mentionMatch[1]);
-        if (mentionedCharacter) {
-          setLastMessageSender(mentionedCharacter.name);
-        }
-      }
-
+      // For the API, we need to add the @ mention even though we don't show it
+      const apiMessageContent = targetCharacterId && selectedChat.type === 'group' 
+        ? `@${targetCharacterId} ${messageContent}`
+        : messageContent;
+      
       const apiMessage = {
         id: userMessage.id,
         role: 'user' as const,
-        content: messageContent,
+        content: apiMessageContent,
         createdAt: new Date()
       };
       
@@ -368,7 +421,13 @@ export default function WhatsAppHome() {
       avatar: show.image || show.name.charAt(0),
       members: show.characters,
       timestamp: new Date(),
-      messages: [] as GroupMessage[],
+      messages: [{
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `Welcome to ${show.name} group chat! 👋\n\nTo interact with characters, use @mentions in your messages. For example:\n• Type @ to see available characters\n• Use @charactername to address specific characters\n\nCharacters will respond when mentioned and may also interact with each other naturally in the conversation.`,
+        timestamp: new Date(),
+        showId: show.id
+      }] as GroupMessage[],
       chainLength: 0
     };
     setActiveChats(prev => [...prev, newChat]);
@@ -834,10 +893,26 @@ export default function WhatsAppHome() {
             ) : (
               // Empty state when no chat is selected
               <div className="flex-1 flex items-center justify-center bg-[#f0f2f5]">
-                <div className="text-center text-[#41525d] p-4">
-                  <div className="text-3xl mb-2">👋</div>
-                  <h3 className="text-xl font-light mb-1">Welcome to WhatsApp</h3>
-                  <p className="text-sm">Select a chat to start messaging</p>
+                <div className="text-center text-[#41525d] p-4 max-w-md">
+                  <div className="text-3xl mb-4">👋</div>
+                  <h3 className="text-xl font-light mb-3">Welcome to WhatsApp</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm mb-2">Start by selecting a chat or creating a new one:</p>
+                      <ul className="text-sm list-disc list-inside text-left space-y-1 bg-white/50 p-4 rounded-lg">
+                        <li>Choose <strong>Individual Chats</strong> for one-on-one conversations</li>
+                        <li>Select <strong>Group Chats</strong> to interact with multiple characters</li>
+                      </ul>
+                    </div>
+                    <div className="bg-[#dcf8c6] p-4 rounded-lg text-left">
+                      <p className="text-sm font-medium mb-2">💡 Group Chat Tips:</p>
+                      <ul className="text-sm list-disc list-inside space-y-1">
+                        <li>Type @ to mention specific characters</li>
+                        <li>Characters will respond when mentioned</li>
+                        <li>Watch characters interact with each other</li>
+                      </ul>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

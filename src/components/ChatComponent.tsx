@@ -41,6 +41,7 @@ export default function ChatComponent() {
   const [lastResponseTime, setLastResponseTime] = useState<number | null>(null);
   const [chainLength, setChainLength] = useState(0);
   const [chainId, setChainId] = useState<string | null>(null);
+  const [lastSpeakingCharacter, setLastSpeakingCharacter] = useState<string | null>(null);
 
   const currentShow = activeShow ? getShowById(activeShow) : null;
   const currentCharacter = mentionedCharacter ? getCharacterById(mentionedCharacter) : null;
@@ -113,6 +114,11 @@ export default function ChatComponent() {
         setChainLength(0);
         setChainId(null);
       }
+
+      // Update last speaking character
+      if (character?.id) {
+        setLastSpeakingCharacter(character.id);
+      }
     }
   });
 
@@ -132,6 +138,7 @@ export default function ChatComponent() {
       setChainId(null);
       setLastResponseTime(null);
       setLocalMessages([]);
+      return;
     }
 
     // Start new chain for user message
@@ -139,19 +146,41 @@ export default function ChatComponent() {
     setChainId(newChainId);
     setChainLength(0);
 
+    let messageContent = input;
+    let targetCharacterId = mentionedCharacter;
+
+    // Check for explicit @mentions
+    const mentionMatch = input.match(/@([\w-]+)/);
+    
+    // If no explicit mention but we have a last speaking character, use them
+    if (!mentionMatch && lastSpeakingCharacter) {
+      messageContent = `@${lastSpeakingCharacter} ${input}`;
+      targetCharacterId = lastSpeakingCharacter;
+    }
+
     // Add user message to local messages first
     const userMessage: GroupMessage = {
       role: 'user',
-      content: input,
-      characterId: mentionedCharacter,
+      content: messageContent,
+      characterId: targetCharacterId,
       showId: activeShow,
       timestamp: Date.now(),
       chainId: newChainId
     };
     setLocalMessages(prev => [...prev, userMessage]);
     
+    // Update input field
+    handleInputChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>);
+
     // Then send to API
-    await originalHandleSubmit(e);
+    const apiMessage = {
+      id: userMessage.id,
+      role: 'user' as const,
+      content: messageContent,
+      createdAt: new Date()
+    };
+    
+    await append(apiMessage);
   };
 
   const handleInputWithMention = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -587,9 +616,10 @@ export default function ChatComponent() {
               </div>
             )}
             
-            {mentionedCharacter && (
+            {/* Show who will respond - either mentioned character or last speaking character */}
+            {(mentionedCharacter || lastSpeakingCharacter) && (
               <div className="text-xs text-[#00a884] mt-1 ml-1">
-                Talking to {getCharacterById(mentionedCharacter)?.name}
+                Talking to {getCharacterById(mentionedCharacter || lastSpeakingCharacter)?.name}
               </div>
             )}
           </div>
