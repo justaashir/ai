@@ -9,12 +9,6 @@ export type ModelType =
   | 'gpt-4o-mini-richard'
   | 'gpt-4o-mini-tyrion';
 
-export interface ModelOption {
-  id: ModelType;
-  name: string;
-  description: string;
-}
-
 export interface Group {
   id: string;
   name: string;
@@ -45,43 +39,10 @@ export interface GroupMessage extends Message {
   timestamp?: Date;
 }
 
-export interface SVGPreviewProps {
-  svgCode: string;
-  onDownload?: () => void;
-  size?: 'sm' | 'lg';
-  showDownload?: boolean;
-  onElementModify?: (prompt: string) => void;
-  isInspecting?: boolean;
-}
-
-export interface SVGElement {
-  id: string;
-  type: string;
-  attributes: Record<string, string>;
-}
-
-export interface InspectIconProps {
-  isActive: boolean;
-  onClick: () => void;
-}
-
 export interface ContextMessage {
   type: 'image' | 'text';
   content: string;
 }
-
-export interface QuickActionProps {
-  onAction: (action: string) => void;
-  onDownload: () => void;
-  svgCode: string;
-}
-
-export interface OptionSelectorProps {
-  options: { svg: string; description: string }[];
-  onSelect: (index: number) => void;
-  onDownload: (svg: string) => void;
-}
-
 export interface VisualInputProps {
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
