@@ -1,3 +1,6 @@
+import type { Character } from './index';
+import type { Message } from 'ai';
+
 export type ModelType = 
   | 'gpt-4o-mini' 
   | 'gpt-4o' 
@@ -12,11 +15,6 @@ export interface ModelOption {
   description: string;
 }
 
-export interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
 export interface Group {
   id: string;
   name: string;
@@ -26,13 +24,25 @@ export interface Group {
   createdAt: Date;
 }
 
-export interface GroupMessage extends Message {
+export interface Chat {
   id: string;
+  type: 'individual' | 'group';
+  name: string;
+  avatar: string;
+  lastMessage?: string;
+  timestamp?: Date;
+  unreadCount?: number;
+  members?: Character[];
+  messages: GroupMessage[];
+  chainId?: string;
+  chainLength: number;
+  lastSpeakingCharacter?: string;
+}
+
+export interface GroupMessage extends Message {
   characterId?: string;
   showId?: string;
   timestamp?: Date;
-  chainId?: string;
-  chainLength?: number;
 }
 
 export interface SVGPreviewProps {
@@ -56,10 +66,8 @@ export interface InspectIconProps {
 }
 
 export interface ContextMessage {
-  type: string;
-  svg?: string;
-  element?: string;
-  optionNumber?: number;
+  type: 'image' | 'text';
+  content: string;
 }
 
 export interface QuickActionProps {

@@ -1,5 +1,4 @@
 import type { APIRoute } from 'astro';
-import { SVGLogoHandler } from '../../backend/chat/handlers/svg-logo';
 import { BaseChatHandler } from '../../backend/chat/handlers/base';
 import { CharacterChatHandler } from '../../backend/chat/handlers/character';
 import type { ChatRequest } from '../../backend/chat/types';
@@ -11,7 +10,6 @@ export const maxDuration = 300;
 
 // Initialize handlers in order of specificity
 const handlers = [
-  new SVGLogoHandler(),
   new CharacterChatHandler(),
   new BaseChatHandler(),
 ];
